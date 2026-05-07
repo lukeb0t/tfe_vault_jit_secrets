@@ -1,6 +1,8 @@
 data "aws_region" "current" {}
 data "aws_caller_identity" "current" {}
 
+# Always use the latest Amazon Linux 2023 x86_64 HVM AMI so the instance
+# gets current kernel patches without requiring manual AMI ID maintenance.
 data "aws_ami" "amazon_linux_2023" {
   most_recent = true
   owners      = ["amazon"]
@@ -17,8 +19,8 @@ data "aws_ami" "amazon_linux_2023" {
 }
 
 locals {
-  # Normalise the SSM prefix and append the cluster name so each deployment
-  # gets its own isolated parameter namespace: /vault/<cluster_name>/...
+  # Strip leading/trailing slashes from ssm_path_prefix then append cluster_name
+  # so every deployment gets its own isolated SSM namespace: /vault/<cluster_name>/...
   ssm_prefix = "/${trimsuffix(trimprefix(var.ssm_path_prefix, "/"), "/")}/${var.cluster_name}"
 
   common_tags = merge(
@@ -31,13 +33,14 @@ locals {
 }
 
 # ─── KMS Key for Auto-Unseal ────────────────────────────────────────────────
-# The key policy grants the account root full access (which delegates to IAM).
-# Actual usage rights are enforced via the Vault instance's IAM role policy below.
+# Vault uses this key to encrypt/decrypt its master key on every start.
+# The key policy grants the account root principal full access, which lets IAM
+# policies (below) control actual usage — this is the AWS-recommended pattern.
 
 resource "aws_kms_key" "vault" {
   description             = "Vault auto-unseal key — ${var.cluster_name}"
   deletion_window_in_days = var.kms_key_deletion_window_days
-  enable_key_rotation     = true
+  enable_key_rotation     = true # rotate the backing key material annually
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -46,6 +49,8 @@ resource "aws_kms_key" "vault" {
         Sid    = "EnableAccountRootAccess"
         Effect = "Allow"
         Principal = {
+          # Root access is required so IAM role policies can delegate KMS usage.
+          # Without this, even account admins cannot manage the key via IAM.
           AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
         }
         Action   = "kms:*"
@@ -57,12 +62,19 @@ resource "aws_kms_key" "vault" {
   tags = merge(local.common_tags, { Name = "${var.cluster_name}-vault-unseal" })
 }
 
+# Human-readable alias makes it easy to identify the key in the AWS console.
 resource "aws_kms_alias" "vault" {
   name          = "alias/${var.cluster_name}-vault-unseal"
   target_key_id = aws_kms_key.vault.key_id
 }
 
 # ─── IAM Role for EC2 Instance Profile ──────────────────────────────────────
+# The Vault EC2 instance uses this role for:
+#   1. KMS auto-unseal (kms_unseal policy below)
+#   2. Storing init secrets in SSM (ssm_init policy below)
+#   3. SSM Session Manager access for operator troubleshooting
+# When used with dynamic_vault_secrets, this role also needs sts:AssumeRole
+# rights on the target IAM role — managed by that module's trust policy.
 
 resource "aws_iam_role" "vault" {
   name        = "${var.cluster_name}-vault-server"
@@ -74,7 +86,7 @@ resource "aws_iam_role" "vault" {
       {
         Effect = "Allow"
         Principal = {
-          Service = "ec2.amazonaws.com"
+          Service = "ec2.amazonaws.com" # only EC2 instances can assume this role
         }
         Action = "sts:AssumeRole"
       }
@@ -90,7 +102,8 @@ resource "aws_iam_instance_profile" "vault" {
   tags = local.common_tags
 }
 
-# Allow Vault container to use the KMS key for auto-unseal
+# Grants the Vault container the minimum KMS permissions needed for auto-unseal.
+# Scoped to this deployment's specific KMS key ARN — not account-wide.
 resource "aws_iam_role_policy" "vault_kms_unseal" {
   name = "kms-auto-unseal"
   role = aws_iam_role.vault.id
@@ -102,11 +115,11 @@ resource "aws_iam_role_policy" "vault_kms_unseal" {
         Sid    = "VaultKMSUnseal"
         Effect = "Allow"
         Action = [
-          "kms:Decrypt",
-          "kms:Encrypt",
-          "kms:DescribeKey",
-          "kms:GenerateDataKey*",
-          "kms:ReEncrypt*"
+          "kms:Decrypt",          # unwrap the master key on unseal
+          "kms:Encrypt",          # wrap the master key on seal
+          "kms:DescribeKey",      # validate the key exists and is enabled
+          "kms:GenerateDataKey*", # generate data encryption keys
+          "kms:ReEncrypt*"        # re-wrap key material under a new key version
         ]
         Resource = aws_kms_key.vault.arn
       }
@@ -114,7 +127,8 @@ resource "aws_iam_role_policy" "vault_kms_unseal" {
   })
 }
 
-# Allow cloud-init to write the root token and recovery keys to SSM
+# Grants the cloud-init script permission to write the root token and recovery
+# keys to SSM. Scoped to the cluster's SSM prefix path — not all parameters.
 resource "aws_iam_role_policy" "vault_ssm_init" {
   name = "ssm-init-secrets"
   role = aws_iam_role.vault.id
@@ -126,17 +140,19 @@ resource "aws_iam_role_policy" "vault_ssm_init" {
         Sid    = "VaultSSMInitWrite"
         Effect = "Allow"
         Action = [
-          "ssm:PutParameter",
-          "ssm:GetParameter",
+          "ssm:PutParameter",  # write root token + recovery keys on init
+          "ssm:GetParameter",  # read back to verify (optional but useful)
           "ssm:GetParameters"
         ]
+        # Restrict to this cluster's namespace only — no access to other prefixes.
         Resource = "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter${local.ssm_prefix}/*"
       }
     ]
   })
 }
 
-# SSM Session Manager — allows SSH-less access to the instance for troubleshooting
+# Attaches the AWS-managed policy that enables SSM Session Manager.
+# This allows interactive shell sessions without an open SSH port or key pair.
 resource "aws_iam_role_policy_attachment" "vault_ssm_session_manager" {
   role       = aws_iam_role.vault.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
@@ -157,6 +173,8 @@ resource "aws_security_group" "vault" {
     cidr_blocks = var.vault_ingress_cidr_blocks
   }
 
+  # SSH ingress is omitted entirely when ssh_ingress_cidr_blocks is empty,
+  # enforcing SSM-only access by default.
   dynamic "ingress" {
     for_each = length(var.ssh_ingress_cidr_blocks) > 0 ? [1] : []
     content {
@@ -178,14 +196,17 @@ resource "aws_security_group" "vault" {
 
   tags = merge(local.common_tags, { Name = "${var.cluster_name}-vault" })
 
+  # Ensures the new SG is created before the old one is destroyed during updates,
+  # preventing a window where the instance has no security group attached.
   lifecycle {
     create_before_destroy = true
   }
 }
 
 # ─── Elastic IP ──────────────────────────────────────────────────────────────
-# Allocated before the instance so its address can be embedded in cloud-init
-# (Vault api_addr and the TLS SAN both use the public IP).
+# The EIP is allocated before the instance is created. Terraform passes the EIP's
+# public IP into the cloud-init template so Vault's api_addr and TLS SAN are
+# correct before the instance even boots — no chicken-and-egg problem.
 
 resource "aws_eip" "vault" {
   domain = "vpc"
@@ -205,9 +226,10 @@ resource "aws_instance" "vault" {
   subnet_id              = var.subnet_id
   vpc_security_group_ids = [aws_security_group.vault.id]
   iam_instance_profile   = aws_iam_instance_profile.vault.name
-  key_name               = var.key_pair_name
+  key_name               = var.key_pair_name # null = no key pair; use SSM Session Manager
 
-  # Changing any template variable forces a new instance + re-initialisation
+  # Any change to a template variable (version, license, KMS key, etc.) replaces
+  # the instance and re-runs the full cloud-init bootstrap automatically.
   user_data_replace_on_change = true
 
   user_data = templatefile("${path.module}/templates/cloud-init.sh.tpl", {
@@ -217,21 +239,23 @@ resource "aws_instance" "vault" {
     kms_key_id     = aws_kms_key.vault.key_id
     aws_region     = data.aws_region.current.name
     ssm_prefix     = local.ssm_prefix
-    vault_api_addr = aws_eip.vault.public_ip
+    vault_api_addr = aws_eip.vault.public_ip # embedded into TLS SAN + Vault api_addr
   })
 
-  # IMDSv2 required; hop limit of 2 allows the Docker container to reach the
-  # metadata service for IAM credential delivery (needed for KMS auto-unseal).
   metadata_options {
-    http_endpoint               = "enabled"
-    http_tokens                 = "required"
+    http_endpoint = "enabled"
+    http_tokens   = "required" # enforce IMDSv2; rejects unauthenticated metadata requests
+
+    # Default hop limit is 1, which blocks containers from reaching IMDS.
+    # Setting 2 allows the Docker container to call IMDS for IAM credentials
+    # (needed so Vault can authenticate to KMS for auto-unseal).
     http_put_response_hop_limit = 2
   }
 
   root_block_device {
     volume_size           = var.root_volume_size_gb
-    volume_type           = "gp3"
-    encrypted             = true
+    volume_type           = "gp3"    # better baseline IOPS than gp2 at same cost
+    encrypted             = true     # encrypt Raft data at rest
     delete_on_termination = true
   }
 

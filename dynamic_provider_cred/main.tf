@@ -18,7 +18,8 @@
 
 # ─── JWT Auth Backend ────────────────────────────────────────────────────────
 # Vault trusts TFE as an OIDC identity provider by pointing at TFE's
-# OIDC discovery endpoint.
+# OIDC discovery endpoint (https://<tfe_hostname>/.well-known/openid-configuration).
+# Vault fetches the JWKS from this URL to verify incoming JWT signatures.
 
 resource "vault_jwt_auth_backend" "tfe" {
   path        = var.jwt_backend_path
@@ -26,8 +27,9 @@ resource "vault_jwt_auth_backend" "tfe" {
   type        = "jwt"
 
   # For self-hosted TFE the discovery URL is the TFE hostname itself.
+  # Vault will append /.well-known/openid-configuration automatically.
   oidc_discovery_url = "https://${var.tfe_hostname}"
-  bound_issuer       = "https://${var.tfe_hostname}"
+  bound_issuer       = "https://${var.tfe_hostname}" # must match the 'iss' claim in TFE JWTs
 
   # If TFE uses a self-signed or private CA certificate, provide it here.
   # Retrieve the cert with:
@@ -45,6 +47,7 @@ resource "vault_policy" "tfe_workspace" {
 
   policy = <<-EOT
     # Required: allow the token to look up, renew, and revoke itself.
+    # TFE's dynamic credentials protocol calls these paths automatically.
     path "auth/token/lookup-self" {
       capabilities = ["read"]
     }
@@ -73,26 +76,31 @@ resource "vault_jwt_auth_backend_role" "tfe_workspace" {
   role_name = var.vault_role_name
   role_type = "jwt"
 
+  # vault.workload.identity is the default audience TFE uses; override with
+  # TFC_VAULT_WORKLOAD_IDENTITY_AUDIENCE in the workspace if you change this.
   bound_audiences   = [var.workload_identity_audience]
-  bound_claims_type = "glob"
+  bound_claims_type = "glob" # enables wildcard matching in bound_claims values
 
+  # The sub claim encodes org, project, workspace, and run phase.
+  # Using "*" for workspace matches all workspaces — scope this in production.
   bound_claims = {
     sub = "organization:${var.tfe_organization}:project:${var.tfe_project}:workspace:${var.tfe_workspace}:run_phase:*"
   }
 
-  # terraform_full_workspace is the recommended user_claim — it encodes org,
-  # project, and workspace name, giving each workspace a unique Vault identity.
+  # terraform_full_workspace encodes the full org/project/workspace path,
+  # giving each workspace a unique identity in Vault audit logs.
   user_claim = "terraform_full_workspace"
 
   token_policies = [vault_policy.tfe_workspace.name]
   token_ttl      = var.token_ttl_seconds
 
-  # Renewable so TFE can extend the token for long-running applies.
+  # Must be true — TFE renews the token periodically during long-running applies.
   token_renewable = true
 }
 
 # ─── Demo KV v2 Mount (optional) ────────────────────────────────────────────
 # Provides a concrete secrets mount the TFE workspace policy grants access to.
+# Disable with create_demo_kv_mount = false when using your own secrets mounts.
 
 resource "vault_mount" "kv" {
   count = var.create_demo_kv_mount ? 1 : 0
@@ -145,6 +153,7 @@ resource "tfe_variable" "vault_run_role" {
 }
 
 resource "tfe_variable" "vault_namespace" {
+  # Only inject namespace if one is set — root namespace needs no variable.
   count = var.configure_tfe_workspace && var.vault_namespace != "" ? 1 : 0
 
   workspace_id = var.tfe_workspace_id
@@ -155,12 +164,13 @@ resource "tfe_variable" "vault_namespace" {
 }
 
 resource "tfe_variable" "vault_encoded_cacert" {
+  # Only inject the CA cert when one is provided — omit for public CA-signed certs.
   count = var.configure_tfe_workspace && var.vault_ca_cert_b64 != "" ? 1 : 0
 
   workspace_id = var.tfe_workspace_id
   key          = "TFC_VAULT_ENCODED_CACERT"
   value        = var.vault_ca_cert_b64
   category     = "env"
-  sensitive    = true
+  sensitive    = true # prevents the cert from appearing in TFE UI
   description  = "Base64-encoded Vault CA cert — required for self-signed TLS"
 }
