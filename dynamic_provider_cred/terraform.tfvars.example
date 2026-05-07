@@ -1,0 +1,29 @@
+# dynamic_provider_cred — example variable values
+
+vault_addr      = "https://1.2.3.4:8200"
+vault_namespace = "" # leave empty for root namespace
+
+tfe_hostname     = "tfe.example.com"
+tfe_organization = "my-org"
+tfe_project      = "*"   # scope to a specific project name in production
+tfe_workspace    = "*"   # scope to a specific workspace name in production
+
+jwt_backend_path           = "jwt"
+vault_role_name            = "tfe-dynamic-creds"
+vault_policy_name          = "tfe-dynamic-creds-policy"
+workload_identity_audience = "vault.workload.identity"
+token_ttl_seconds          = 1200
+
+# Paths this policy grants read access to
+secret_paths = ["secret/data/*"]
+
+create_demo_kv_mount = true
+
+# ── TFE workspace variable injection ──────────────────────────────────────
+# Set configure_tfe_workspace = true and un-comment the tfe provider in
+# versions.tf to have Terraform inject the env vars automatically.
+configure_tfe_workspace = false
+tfe_workspace_id        = "" # e.g. "ws-XXXXXXXXXXXXXXXX"
+
+# base64 of the Vault self-signed CA cert
+# vault_ca_cert_b64 = "LS0tLS1CRUdJTi..."

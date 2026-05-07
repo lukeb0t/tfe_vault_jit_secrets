@@ -1,0 +1,205 @@
+# tfe_vault_jit_secrets
+
+Terraform modules for deploying **HashiCorp Vault Enterprise** on AWS and configuring **just-in-time (JIT) dynamic secrets** for Terraform Enterprise (TFE) workloads — no long-lived credentials required.
+
+This repo implements two HashiCorp validated patterns:
+
+| Pattern | Module | Reference |
+|---------|--------|-----------|
+| TFE workspaces authenticate to Vault via JWT workload identity and receive a short-lived Vault token for the Vault Terraform provider | [`dynamic_provider_cred`](./dynamic_provider_cred/) | [Vault-backed dynamic credentials — Vault configuration](https://developer.hashicorp.com/terraform/cloud-docs/dynamic-provider-credentials/vault-configuration) |
+| Vault injects short-lived AWS STS credentials directly into TFE workspaces — no static AWS keys anywhere | [`dynamic_vault_secrets`](./dynamic_vault_secrets/) | [Terraform Vault-backed dynamic credentials for AWS](https://developer.hashicorp.com/validated-patterns/terraform/terraform-vault-backed-dynamic-credentials-aws) |
+
+---
+
+## Repository layout
+
+```
+tfe_vault_jit_secrets/
+├── vault_deploy/           # Module 1 — Deploy Vault Enterprise on EC2
+├── dynamic_provider_cred/  # Module 2 — TFE → Vault JWT auth (Vault provider creds)
+├── dynamic_vault_secrets/  # Module 3 — TFE → Vault → AWS STS (vault-backed AWS creds)
+└── test_deploy/            # Example root module — wires vault_deploy into a fresh VPC
+```
+
+---
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         AWS Account                                      │
+│                                                                          │
+│   ┌──────────────┐   KMS Auto-Unseal   ┌─────────────────────────────┐ │
+│   │  AWS KMS Key │◄────────────────────│   Vault Enterprise (EC2)    │ │
+│   └──────────────┘                     │   Docker · Raft storage      │ │
+│                                        │   Self-signed TLS            │ │
+│   ┌──────────────┐   Init secrets      │   api_addr = EIP             │ │
+│   │  SSM Param   │◄────────────────────│                              │ │
+│   │  Store       │   (root token +     └──────────────┬──────────────┘ │
+│   │  /vault/...  │    recovery keys)                  │                 │
+│   └──────────────┘                                    │                 │
+│                                                        │ JWT Auth        │
+│                                        ┌───────────────▼──────────────┐ │
+│                                        │   Terraform Enterprise (TFE) │ │
+│                                        │                              │ │
+│                                        │  Use Case A (dynamic_        │ │
+│                                        │  provider_cred):             │ │
+│                                        │  JWT → Vault token           │ │
+│                                        │  → Vault Terraform provider  │ │
+│                                        │                              │ │
+│                                        │  Use Case B (dynamic_        │ │
+│                                        │  vault_secrets):             │ │
+│                                        │  JWT → Vault token           │ │
+│                                        │  → Vault AWS secrets engine  │ │
+│                                        │  → STS credentials injected  │ │
+│                                        │    as env vars               │ │
+│                                        └──────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Modules
+
+### 1. [`vault_deploy`](./vault_deploy/)
+
+Deploys a single-node Vault Enterprise server on EC2 using Docker and cloud-init. The instance bootstraps completely automatically — no manual steps required.
+
+**Key features:**
+- Vault Enterprise runs as a Docker container (image: `hashicorp/vault-enterprise`)
+- AWS KMS auto-unseal — Vault unseals itself on (re)start without human intervention
+- Self-signed TLS certificate with the EIP embedded as a SAN
+- Raft integrated storage
+- `vault operator init` runs automatically; root token + recovery keys stored in SSM Parameter Store as `SecureString`
+- IMDSv2 enforced; hop limit 2 to allow the container to reach instance metadata
+
+### 2. [`dynamic_provider_cred`](./dynamic_provider_cred/)
+
+Configures Vault as an OIDC identity provider trusted by TFE. TFE workspaces exchange a workload-identity JWT for a short-lived Vault token scoped to a Vault policy — no Vault token management required.
+
+**Key features:**
+- JWT auth backend pointed at TFE's OIDC discovery URL
+- `bound_claims` scoped to TFE org / project / workspace (supports glob matching)
+- Vault policy granting token self-management + configurable secret paths
+- Optional: automatically injects `TFC_VAULT_PROVIDER_AUTH`, `TFC_VAULT_ADDR`, `TFC_VAULT_RUN_ROLE` into the TFE workspace via `tfe_variable` resources
+
+### 3. [`dynamic_vault_secrets`](./dynamic_vault_secrets/)
+
+Extends the JWT auth pattern to deliver short-lived AWS STS credentials directly into TFE workspace environments via the Vault AWS secrets engine. Eliminates all static AWS credentials from TFE.
+
+**Key features:**
+- Vault AWS secrets engine using `assumed_role` credential type
+- Target IAM role created in the same account; trust policy allows the Vault EC2 role to assume it
+- Vault inherits AWS permissions from the EC2 instance profile — no static Vault IAM user keys required
+- Optional: automatically injects all 7 `TFC_VAULT_BACKED_AWS_*` environment variables into the TFE workspace
+
+---
+
+## Quick start
+
+### Prerequisites
+
+- Terraform >= 1.5.0
+- AWS credentials with sufficient permissions (EC2, IAM, KMS, SSM)
+- A Vault Enterprise license string
+- An existing AWS VPC with a public subnet **or** use `test_deploy/` which creates a fresh VPC
+
+### Step 1 — Deploy Vault
+
+```hcl
+module "vault" {
+  source = "./vault_deploy"
+
+  cluster_name  = "my-vault"
+  vault_version = "2.0.0-ent"
+  vault_license = var.vault_license   # mark sensitive
+
+  vpc_id    = "vpc-xxxxxxxx"
+  subnet_id = "subnet-xxxxxxxx"
+}
+```
+
+```bash
+cd vault_deploy
+terraform init && terraform apply
+```
+
+Vault initialises automatically. Retrieve the root token once apply completes:
+
+```bash
+aws ssm get-parameter \
+  --name "$(terraform output -raw ssm_root_token_path)" \
+  --with-decryption \
+  --query Parameter.Value --output text
+```
+
+### Step 2 — Configure TFE dynamic provider credentials (Use Case A)
+
+```hcl
+provider "vault" {
+  address = module.vault.vault_addr
+  token   = var.vault_root_token
+}
+
+module "dyn_provider" {
+  source = "./dynamic_provider_cred"
+
+  vault_addr       = module.vault.vault_addr
+  tfe_hostname     = "tfe.example.com"
+  tfe_organization = "my-org"
+  tfe_workspace    = "my-workspace"
+}
+```
+
+### Step 3 — Configure Vault-backed AWS credentials (Use Case B)
+
+```hcl
+provider "vault" {
+  address = module.vault.vault_addr
+  token   = var.vault_root_token
+}
+
+provider "aws" {
+  region = "us-east-1"
+}
+
+module "dyn_aws" {
+  source = "./dynamic_vault_secrets"
+
+  vault_addr                 = module.vault.vault_addr
+  tfe_hostname               = "tfe.example.com"
+  tfe_organization           = "my-org"
+  tfe_workspace              = "my-workspace"
+  aws_secrets_backend_region = "us-east-1"
+
+  # Pass the Vault EC2 role ARN so Vault can assume the target role
+  vault_iam_user_arn = module.vault.iam_role_arn
+}
+```
+
+---
+
+## Using `test_deploy`
+
+The `test_deploy/` directory is a standalone root module that creates a fresh VPC (10.100.0.0/16) and deploys `vault_deploy` into it — useful for smoke-testing without pre-existing networking.
+
+```bash
+cd test_deploy
+cp terraform.tfvars.example terraform.tfvars
+# edit terraform.tfvars — set vault_license
+terraform init && terraform apply
+```
+
+---
+
+## References
+
+- [Vault Auto-unseal with AWS KMS](https://developer.hashicorp.com/vault/docs/configuration/seal/awskms)
+- [Vault operator init](https://developer.hashicorp.com/vault/docs/commands/operator/init)
+- [TFE Dynamic Provider Credentials — overview](https://developer.hashicorp.com/terraform/cloud-docs/workspaces/dynamic-provider-credentials)
+- [TFE Dynamic Provider Credentials — Vault configuration](https://developer.hashicorp.com/terraform/cloud-docs/dynamic-provider-credentials/vault-configuration)
+- [Vault-backed dynamic credentials for AWS](https://developer.hashicorp.com/validated-patterns/terraform/terraform-vault-backed-dynamic-credentials-aws)
+- [Vault-backed AWS credentials — TFE configuration](https://developer.hashicorp.com/terraform/cloud-docs/dynamic-provider-credentials/vault-backed/aws-configuration)
+- [Vault JWT/OIDC auth method](https://developer.hashicorp.com/vault/docs/auth/jwt)
+- [Vault AWS secrets engine](https://developer.hashicorp.com/vault/docs/secrets/aws)
+- [Vault Terraform provider](https://registry.terraform.io/providers/hashicorp/vault/latest/docs)

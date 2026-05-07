@@ -1,0 +1,43 @@
+# dynamic_vault_secrets — example variable values
+
+vault_addr      = "https://1.2.3.4:8200"
+vault_namespace = ""
+
+tfe_hostname     = "tfe.example.com"
+tfe_organization = "my-org"
+tfe_project      = "*"
+tfe_workspace    = "*"
+
+jwt_backend_path           = "jwt"
+vault_role_name            = "tfe-vault-backed-aws"
+vault_policy_name          = "tfe-vault-backed-aws-policy"
+workload_identity_audience = "vault.workload.identity"
+token_ttl_seconds          = 1200
+
+aws_secrets_backend_path   = "aws"
+aws_secrets_backend_region = "us-east-1"
+aws_secrets_role_name      = "tfe-dynamic-aws-role"
+
+# Vault IAM user credentials — leave empty to use EC2 instance profile
+# vault_aws_access_key_id     = "AKIAIOSFODNN7EXAMPLE"
+# vault_aws_secret_access_key = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+
+default_sts_ttl_seconds = 3600
+max_sts_ttl_seconds     = 43200
+
+target_iam_role_name = "vault-dynamic-creds-target"
+
+# ARN of the Vault IAM user or EC2 instance role allowed to assume the target role
+vault_iam_user_arn = "arn:aws:iam::123456789012:user/vault"
+
+# Custom IAM policy for the target role (optional — defaults to read-only demo)
+# target_iam_policy_json = <<-EOT
+#   {
+#     "Version": "2012-10-17",
+#     "Statement": [{"Effect": "Allow", "Action": ["ec2:*"], "Resource": "*"}]
+#   }
+# EOT
+
+configure_tfe_workspace = false
+tfe_workspace_id        = ""
+# vault_ca_cert_b64     = "LS0tLS1CRUdJTi..."
