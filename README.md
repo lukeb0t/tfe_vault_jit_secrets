@@ -15,11 +15,13 @@ This repo implements two HashiCorp validated patterns:
 
 ```
 tfe_vault_jit_secrets/
-├── vault_deploy_aws/       # Module 1 — Deploy Vault Enterprise on AWS (EC2 + VPC + KMS)
-├── dynamic_provider_cred/  # Module 2 — TFE → Vault JWT auth (Vault provider creds)
-├── dynamic_vault_secrets/  # Module 3 — TFE → Vault → AWS STS (vault-backed AWS creds)
+├── vault_deploy_aws/       # Deploy Vault Enterprise on AWS (EC2 + VPC + KMS)
+├── vault_deploy_azure/     # Deploy Vault Enterprise on Azure (VM + VNet + Azure Key Vault)
+├── dynamic_provider_cred/  # TFE → Vault JWT auth (Vault provider creds)
+├── dynamic_vault_secrets/  # TFE → Vault → AWS STS (vault-backed AWS creds)
 └── examples/
-    └── aws/                # Minimal example: call vault_deploy_aws with defaults
+    ├── aws/                # Minimal caller: vault_deploy_aws with defaults
+    └── azure/              # Minimal caller: vault_deploy_azure with defaults
 ```
 
 ---
@@ -74,7 +76,18 @@ Deploys a single-node Vault Enterprise server on AWS — fully self-contained. C
 - `vault operator init` runs automatically; root token + recovery keys stored in SSM Parameter Store as `SecureString`
 - IMDSv2 enforced; hop limit 2 to allow the container to reach instance metadata
 
-### 2. [`dynamic_provider_cred`](./dynamic_provider_cred/)
+### 2. [`vault_deploy_azure`](./vault_deploy_azure/)
+
+Deploys the same single-node Vault Enterprise cluster on **Azure** — a drop-in alternative to `vault_deploy_aws`. Creates its own VNet and networking by default (BYOVNET supported).
+
+**Key features:**
+- Vault Enterprise runs as a Docker container on Ubuntu 22.04 LTS
+- **Azure Key Vault** auto-unseal — replaces both AWS KMS (unseal key) and SSM Parameter Store (secret storage)
+- **User-Assigned Managed Identity** — replaces AWS IAM instance profile; identity lifecycle is independent of the VM
+- Self-signed TLS certificate; static Standard-SKU public IP embedded as SAN
+- `vault operator init` runs via cloud-init; root token + recovery keys stored as Azure Key Vault secrets
+
+### 4. [`dynamic_provider_cred`](./dynamic_provider_cred/)
 
 Configures Vault as an OIDC identity provider trusted by TFE. TFE workspaces exchange a workload-identity JWT for a short-lived Vault token scoped to a Vault policy — no Vault token management required.
 
@@ -84,7 +97,7 @@ Configures Vault as an OIDC identity provider trusted by TFE. TFE workspaces exc
 - Vault policy granting token self-management + configurable secret paths
 - Optional: automatically injects `TFC_VAULT_PROVIDER_AUTH`, `TFC_VAULT_ADDR`, `TFC_VAULT_RUN_ROLE` into the TFE workspace via `tfe_variable` resources
 
-### 3. [`dynamic_vault_secrets`](./dynamic_vault_secrets/)
+### 5. [`dynamic_vault_secrets`](./dynamic_vault_secrets/)
 
 Extends the JWT auth pattern to deliver short-lived AWS STS credentials directly into TFE workspace environments via the Vault AWS secrets engine. Eliminates all static AWS credentials from TFE.
 

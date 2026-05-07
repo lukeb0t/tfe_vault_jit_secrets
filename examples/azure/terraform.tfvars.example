@@ -1,0 +1,14 @@
+# Copy this file to terraform.tfvars and fill in the values.
+# Never commit terraform.tfvars — it is in .gitignore.
+
+cluster_name        = "vault-poc"
+vault_version       = "2.0.0-ent"
+location            = "East US"
+resource_group_name = "my-resource-group"
+
+# Your SSH public key string (contents of ~/.ssh/id_rsa.pub or similar).
+admin_ssh_public_key = "ssh-rsa AAAA..."
+
+# vault_license is sensitive — prefer TF_VAR_vault_license env var:
+#   export TF_VAR_vault_license="<license>"
+# vault_license = "<license>"

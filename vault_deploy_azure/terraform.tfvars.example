@@ -1,0 +1,12 @@
+# Copy to terraform.tfvars (never commit — it contains the Vault license).
+# Prefer TF_VAR_vault_license for the license value.
+
+cluster_name             = "vault-poc"
+vault_version            = "2.0.0-ent"
+location                 = "East US"
+resource_group_name      = "my-resource-group"
+admin_ssh_public_key     = "ssh-rsa AAAA..."
+vault_ingress_cidr_blocks = ["0.0.0.0/0"]
+ssh_ingress_cidr_blocks   = []
+
+# vault_license = "<license>"  # prefer TF_VAR_vault_license
