@@ -68,29 +68,29 @@ Once Vault is running, the two dynamic-secrets modules work identically regardle
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
-│  AWS Account                                                              │
-│                                                                           │
-│  ┌──────────────┐  KMS Auto-Unseal   ┌──────────────────────────────┐   │
-│  │  KMS CMK     │◄───────────────────│  Vault Enterprise (EC2)      │   │
-│  └──────────────┘                    │  Docker · Raft · self-signed  │   │
-│  ┌──────────────┐  Init secrets      │  TLS · api_addr = EIP        │   │
-│  │  SSM Param   │◄───────────────────│                              │   │
-│  │  Store       │  root token +      └──────────────┬───────────────┘   │
+│  AWS Account                                                             │
+│                                                                          │
+│  ┌──────────────┐  KMS Auto-Unseal   ┌──────────────────────────────┐    │
+│  │  KMS CMK     │◄───────────────────│  Vault Enterprise (EC2)      │    │
+│  └──────────────┘                    │  Docker · Raft · self-signed │    │ 
+│  ┌──────────────┐  Init secrets      │  TLS · api_addr = EIP        │    │
+│  │  SSM Param   │◄───────────────────│                              │    │
+│  │  Store       │  root token +      └──────────────┬───────────────┘    │
 │  └──────────────┘  recovery keys                    │                    │
-│                                                      │ JWT auth           │
-│                                      ┌───────────────▼──────────────┐   │
-│                                      │  Terraform Enterprise (TFE)  │   │
-│                                      │                              │   │
-│                                      │  Use Case A                  │   │
-│                                      │  JWT → Vault token           │   │
-│                                      │  → Vault Terraform provider  │   │
-│                                      │                              │   │
-│                                      │  Use Case B                  │   │
-│                                      │  JWT → Vault token           │   │
-│                                      │  → Vault AWS secrets engine  │   │
-│                                      │  → STS creds injected as     │   │
-│                                      │    env vars                  │   │
-│                                      └──────────────────────────────┘   │
+│                                                      │ JWT auth          │
+│                                      ┌───────────────▼──────────────┐    │
+│                                      │  Terraform Enterprise (TFE)  │    │
+│                                      │                              │    │
+│                                      │  Use Case A                  │    │
+│                                      │  JWT → Vault token           │    │
+│                                      │  → Vault Terraform provider  │    │
+│                                      │                              │    │
+│                                      │  Use Case B                  │    │
+│                                      │  JWT → Vault token           │    │
+│                                      │  → Vault AWS secrets engine  │    │
+│                                      │  → STS creds injected as     │    │
+│                                      │    env vars                  │    │
+│                                      └──────────────────────────────┘    │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -98,34 +98,34 @@ Once Vault is running, the two dynamic-secrets modules work identically regardle
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
-│  Azure Subscription                                                       │
-│                                                                           │
+│  Azure Subscription                                                      │
+│                                                                          │
 │  ┌──────────────────┐  Key Vault Auto-Unseal                             │
-│  │  Azure Key Vault │◄───────────────────────┐                          │
-│  │  ├─ RSA key      │  (wrapKey/unwrapKey)   │                          │
-│  │  └─ Secrets      │◄──────────────────┐   │                          │
-│  └──────────────────┘  root token +     │   │                          │
-│                         recovery keys   │   │                          │
-│                                         │   │                          │
-│  ┌──────────────────────────────────────┴───┴──────────────────────┐   │
-│  │  Vault Enterprise (Linux VM)                                     │   │
-│  │  Docker · Raft · self-signed TLS · api_addr = static public IP  │   │
-│  │  User-Assigned Managed Identity → Key Vault RBAC                │   │
-│  └─────────────────────────────────┬────────────────────────────── ┘   │
+│  │  Azure Key Vault │◄──────────────────────┐                            │
+│  │  ├─ RSA key      │  (wrapKey/unwrapKey)  │                            │
+│  │  └─ Secrets      │◄──────────────────┐   │                            │
+│  └──────────────────┘  root token +     │   │                            │
+│                         recovery keys   │   │                            │
+│                                         │   │                            │
+│  ┌──────────────────────────────────────┴───┴──────────────────────┐     │
+│  │  Vault Enterprise (Linux VM)                                    │     │
+│  │  Docker · Raft · self-signed TLS · api_addr = static public IP  │     │
+│  │  User-Assigned Managed Identity → Key Vault RBAC                │     │
+│  └─────────────────────────────────┬────────────────────────────── ┘     │
 │                                    │ JWT auth                            │
-│                    ┌───────────────▼──────────────┐                     │
-│                    │  Terraform Enterprise (TFE)  │                     │
-│                    │                              │                     │
-│                    │  Use Case A                  │                     │
-│                    │  JWT → Vault token           │                     │
-│                    │  → Vault Terraform provider  │                     │
-│                    │                              │                     │
-│                    │  Use Case B                  │                     │
-│                    │  JWT → Vault token           │                     │
-│                    │  → Vault AWS secrets engine  │                     │
-│                    │  → STS creds injected as     │                     │
-│                    │    env vars                  │                     │
-│                    └──────────────────────────────┘                     │
+│                    ┌───────────────▼──────────────┐                      │
+│                    │  Terraform Enterprise (TFE)  │                      │
+│                    │                              │                      │
+│                    │  Use Case A                  │                      │
+│                    │  JWT → Vault token           │                      │
+│                    │  → Vault Terraform provider  │                      │
+│                    │                              │                      │
+│                    │  Use Case B                  │                      │
+│                    │  JWT → Vault token           │                      │
+│                    │  → Vault AWS secrets engine  │                      │
+│                    │  → STS creds injected as     │                      │
+│                    │    env vars                  │                      │
+│                    └──────────────────────────────┘                      │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
