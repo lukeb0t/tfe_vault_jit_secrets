@@ -24,13 +24,27 @@ variable "vault_license" {
 # ─── Networking ────────────────────────────────────────────────────────────
 
 variable "vpc_id" {
-  description = "ID of the existing VPC where the Vault EC2 instance will be deployed."
+  description = "ID of an existing VPC to deploy into. If null (default), the module creates a new VPC using vpc_cidr. When provided, subnet_id must also be supplied."
   type        = string
+  default     = null # null = module manages its own VPC
 }
 
 variable "subnet_id" {
-  description = "ID of the existing public subnet where the Vault EC2 instance will be placed."
+  description = "ID of an existing public subnet. Required when vpc_id is provided; ignored when vpc_id is null (the module creates a subnet automatically)."
   type        = string
+  default     = null
+}
+
+variable "vpc_cidr" {
+  description = "CIDR block for the VPC created by this module. Only used when vpc_id is null."
+  type        = string
+  default     = "10.100.0.0/16"
+}
+
+variable "subnet_cidr" {
+  description = "CIDR block for the public subnet created by this module. Only used when vpc_id is null."
+  type        = string
+  default     = "10.100.1.0/24"
 }
 
 variable "vault_ingress_cidr_blocks" {

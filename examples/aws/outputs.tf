@@ -13,17 +13,17 @@ output "instance_id" {
   value       = module.vault.instance_id
 }
 
+output "vpc_id" {
+  description = "VPC created by the module."
+  value       = module.vault.vpc_id
+}
+
 output "ssm_root_token_path" {
-  description = "SSM path for the Vault root token."
+  description = "SSM path to retrieve the Vault root token."
   value       = module.vault.ssm_root_token_path
 }
 
 output "kms_key_id" {
   description = "KMS key used for auto-unseal."
   value       = module.vault.kms_key_id
-}
-
-output "retrieve_root_token_cmd" {
-  description = "AWS CLI command to retrieve the Vault root token from SSM."
-  value       = "aws ssm get-parameter --name '${module.vault.ssm_root_token_path}' --with-decryption --region ${var.aws_region} --query Parameter.Value --output text"
 }

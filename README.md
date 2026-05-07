@@ -15,10 +15,11 @@ This repo implements two HashiCorp validated patterns:
 
 ```
 tfe_vault_jit_secrets/
-├── vault_deploy/           # Module 1 — Deploy Vault Enterprise on EC2
+├── vault_deploy_aws/       # Module 1 — Deploy Vault Enterprise on AWS (EC2 + VPC + KMS)
 ├── dynamic_provider_cred/  # Module 2 — TFE → Vault JWT auth (Vault provider creds)
 ├── dynamic_vault_secrets/  # Module 3 — TFE → Vault → AWS STS (vault-backed AWS creds)
-└── test_deploy/            # Example root module — wires vault_deploy into a fresh VPC
+└── examples/
+    └── aws/                # Minimal example: call vault_deploy_aws with defaults
 ```
 
 ---
@@ -61,9 +62,9 @@ tfe_vault_jit_secrets/
 
 ## Modules
 
-### 1. [`vault_deploy`](./vault_deploy/)
+### 1. [`vault_deploy_aws`](./vault_deploy_aws/)
 
-Deploys a single-node Vault Enterprise server on EC2 using Docker and cloud-init. The instance bootstraps completely automatically — no manual steps required.
+Deploys a single-node Vault Enterprise server on AWS — fully self-contained. Creates its own VPC and networking by default (BYOVPC supported via `vpc_id`/`subnet_id` variables).
 
 **Key features:**
 - Vault Enterprise runs as a Docker container (image: `hashicorp/vault-enterprise`)
@@ -102,25 +103,25 @@ Extends the JWT auth pattern to deliver short-lived AWS STS credentials directly
 - Terraform >= 1.5.0
 - AWS credentials with sufficient permissions (EC2, IAM, KMS, SSM)
 - A Vault Enterprise license string
-- An existing AWS VPC with a public subnet **or** use `test_deploy/` which creates a fresh VPC
+- An existing AWS VPC with a public subnet — **or let the module create one automatically** (default behaviour)
 
 ### Step 1 — Deploy Vault
 
 ```hcl
 module "vault" {
-  source = "./vault_deploy"
+  source = "./vault_deploy_aws"
 
   cluster_name  = "my-vault"
   vault_version = "2.0.0-ent"
   vault_license = var.vault_license   # mark sensitive
 
-  vpc_id    = "vpc-xxxxxxxx"
-  subnet_id = "subnet-xxxxxxxx"
+  # VPC and subnet are created automatically.
+  # To use an existing VPC: vpc_id = "vpc-xxx" and subnet_id = "subnet-xxx"
 }
 ```
 
 ```bash
-cd vault_deploy
+cd vault_deploy_aws
 terraform init && terraform apply
 ```
 
@@ -179,12 +180,12 @@ module "dyn_aws" {
 
 ---
 
-## Using `test_deploy`
+## Examples
 
-The `test_deploy/` directory is a standalone root module that creates a fresh VPC (10.100.0.0/16) and deploys `vault_deploy` into it — useful for smoke-testing without pre-existing networking.
+The `examples/aws/` directory is a minimal root module that calls `vault_deploy_aws` with defaults — useful for a quick smoke-test deployment.
 
 ```bash
-cd test_deploy
+cd examples/aws
 cp terraform.tfvars.example terraform.tfvars
 # edit terraform.tfvars — set vault_license
 terraform init && terraform apply

@@ -47,3 +47,15 @@ output "vault_tls_cert_host_path" {
   description = "Path on the EC2 host where the self-signed TLS cert is stored. Retrieve it via SSM Session Manager to set VAULT_CACERT locally."
   value       = "/opt/vault/certs/vault.crt"
 }
+
+# ─── Networking outputs (useful when the module created the VPC) ─────────────
+
+output "vpc_id" {
+  description = "ID of the VPC used by this deployment (created by module or provided via var.vpc_id)."
+  value       = local.vpc_id_resolved
+}
+
+output "subnet_id" {
+  description = "ID of the public subnet used by this deployment."
+  value       = local.subnet_id_resolved
+}

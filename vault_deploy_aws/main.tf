@@ -1,6 +1,11 @@
 data "aws_region" "current" {}
 data "aws_caller_identity" "current" {}
 
+# Pick the first available AZ in the region for the managed subnet.
+data "aws_availability_zones" "available" {
+  state = "available"
+}
+
 # Always use the latest Amazon Linux 2023 x86_64 HVM AMI so the instance
 # gets current kernel patches without requiring manual AMI ID maintenance.
 data "aws_ami" "amazon_linux_2023" {
@@ -23,13 +28,64 @@ locals {
   # so every deployment gets its own isolated SSM namespace: /vault/<cluster_name>/...
   ssm_prefix = "/${trimsuffix(trimprefix(var.ssm_path_prefix, "/"), "/")}/${var.cluster_name}"
 
+  # When vpc_id is null the module creates its own VPC and subnet.
+  # When vpc_id is provided the caller must also supply subnet_id.
+  create_networking = var.vpc_id == null
+  vpc_id_resolved   = local.create_networking ? aws_vpc.vault[0].id : var.vpc_id
+  subnet_id_resolved = local.create_networking ? aws_subnet.vault_public[0].id : var.subnet_id
+
   common_tags = merge(
     {
-      Module      = "vault_deploy"
+      Module      = "vault_deploy_aws"
       ClusterName = var.cluster_name
     },
     var.tags
   )
+}
+
+# ─── VPC & Networking (managed — only created when vpc_id is not supplied) ────
+
+resource "aws_vpc" "vault" {
+  count                = local.create_networking ? 1 : 0
+  cidr_block           = var.vpc_cidr
+  enable_dns_support   = true
+  enable_dns_hostnames = true # required for SSM Session Manager endpoint resolution
+
+  tags = merge(local.common_tags, { Name = "${var.cluster_name}-vpc" })
+}
+
+resource "aws_internet_gateway" "vault" {
+  count  = local.create_networking ? 1 : 0
+  vpc_id = aws_vpc.vault[0].id
+  tags   = merge(local.common_tags, { Name = "${var.cluster_name}-igw" })
+}
+
+resource "aws_subnet" "vault_public" {
+  count                   = local.create_networking ? 1 : 0
+  vpc_id                  = aws_vpc.vault[0].id
+  cidr_block              = var.subnet_cidr
+  availability_zone       = data.aws_availability_zones.available.names[0]
+  map_public_ip_on_launch = true
+
+  tags = merge(local.common_tags, { Name = "${var.cluster_name}-public" })
+}
+
+resource "aws_route_table" "vault_public" {
+  count  = local.create_networking ? 1 : 0
+  vpc_id = aws_vpc.vault[0].id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.vault[0].id # default route to internet
+  }
+
+  tags = merge(local.common_tags, { Name = "${var.cluster_name}-public-rt" })
+}
+
+resource "aws_route_table_association" "vault_public" {
+  count          = local.create_networking ? 1 : 0
+  subnet_id      = aws_subnet.vault_public[0].id
+  route_table_id = aws_route_table.vault_public[0].id
 }
 
 # ─── KMS Key for Auto-Unseal ────────────────────────────────────────────────
@@ -163,7 +219,7 @@ resource "aws_iam_role_policy_attachment" "vault_ssm_session_manager" {
 resource "aws_security_group" "vault" {
   name_prefix = "${var.cluster_name}-vault-"
   description = "Controls traffic to/from the Vault server (${var.cluster_name})"
-  vpc_id      = var.vpc_id
+  vpc_id      = local.vpc_id_resolved
 
   ingress {
     description = "Vault HTTPS API and UI"
@@ -223,7 +279,7 @@ resource "aws_eip_association" "vault" {
 resource "aws_instance" "vault" {
   ami                    = data.aws_ami.amazon_linux_2023.id
   instance_type          = var.instance_type
-  subnet_id              = var.subnet_id
+  subnet_id              = local.subnet_id_resolved
   vpc_security_group_ids = [aws_security_group.vault.id]
   iam_instance_profile   = aws_iam_instance_profile.vault.name
   key_name               = var.key_pair_name # null = no key pair; use SSM Session Manager
