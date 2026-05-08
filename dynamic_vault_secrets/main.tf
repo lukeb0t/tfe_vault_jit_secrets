@@ -39,7 +39,7 @@ locals {
         Effect   = "Allow"
         Action   = ["ec2:Describe*", "s3:GetObject", "s3:ListBucket"]
         Resource = "*"
-        Comment  = "Replace with the minimum permissions needed by your TFE workspace."
+        # Replace with the minimum permissions needed by your TFE workspace.
       }
     ]
   })
@@ -60,8 +60,8 @@ resource "vault_aws_secret_backend" "aws" {
   access_key = var.vault_aws_access_key_id != "" ? var.vault_aws_access_key_id : null
   secret_key = var.vault_aws_secret_access_key != "" ? var.vault_aws_secret_access_key : null
 
-  default_ttl = var.default_sts_ttl_seconds
-  max_ttl     = var.max_sts_ttl_seconds
+  default_lease_ttl_seconds = var.default_sts_ttl_seconds
+  max_lease_ttl_seconds     = var.max_sts_ttl_seconds
 }
 
 # ─── AWS Secrets Engine Role ─────────────────────────────────────────────────
@@ -114,26 +114,28 @@ resource "vault_policy" "tfe_backed_aws" {
 }
 
 # ─── Vault JWT Auth Backend ──────────────────────────────────────────────────
-# Same pattern as dynamic_provider_cred — Vault trusts TFE as a JWT issuer.
-# If you are also deploying dynamic_provider_cred, these two modules can share
-# a single JWT backend by setting jwt_backend_path to the same value.
+# Vault trusts TFE as an OIDC identity provider. By default this module creates
+# its own JWT backend at "jwt-aws", keeping it independent from dynamic_provider_cred
+# (which defaults to "jwt"). Set create_jwt_backend = false and supply
+# jwt_backend_path only if you explicitly want to share an existing backend.
 
 resource "vault_jwt_auth_backend" "tfe" {
+  count = var.create_jwt_backend ? 1 : 0
+
   path        = var.jwt_backend_path
   description = "Workload identity JWT auth for TFE vault-backed AWS credentials"
   type        = "jwt"
 
-  oidc_discovery_url = "https://${var.tfe_hostname}" # TFE's OIDC discovery root
-  bound_issuer       = "https://${var.tfe_hostname}" # must match 'iss' claim in TFE JWTs
-
-  # Uncomment if TFE uses a private/self-signed certificate:
-  # oidc_discovery_ca_pem = file("tfe-ca.pem")
+  oidc_discovery_url    = "https://${var.tfe_hostname}" # TFE's OIDC discovery root
+  bound_issuer          = "https://${var.tfe_hostname}" # must match 'iss' claim in TFE JWTs
+  oidc_discovery_ca_pem = var.tfe_ca_cert_pem != "" ? var.tfe_ca_cert_pem : null
 }
 
 # ─── JWT Auth Role ───────────────────────────────────────────────────────────
 
 resource "vault_jwt_auth_backend_role" "tfe" {
-  backend   = vault_jwt_auth_backend.tfe.path
+  # Use the path from the backend resource if it was created, otherwise use the variable directly.
+  backend   = var.create_jwt_backend ? vault_jwt_auth_backend.tfe[0].path : var.jwt_backend_path
   role_name = var.vault_role_name
   role_type = "jwt"
 
@@ -147,9 +149,8 @@ resource "vault_jwt_auth_backend_role" "tfe" {
 
   user_claim = "terraform_full_workspace" # unique per workspace — appears in Vault audit logs
 
-  token_policies  = [vault_policy.tfe_backed_aws.name]
-  token_ttl       = var.token_ttl_seconds
-  token_renewable = true # TFE renews the token during long-running applies
+  token_policies = [vault_policy.tfe_backed_aws.name]
+  token_ttl      = var.token_ttl_seconds
 }
 
 # ─── AWS IAM — Target Role ────────────────────────────────────────────────────
@@ -200,7 +201,7 @@ resource "aws_iam_role_policy" "vault_target" {
 # Un-comment the tfe provider in versions.tf and set configure_tfe_workspace = true.
 
 resource "tfe_variable" "vault_provider_auth" {
-  count = var.configure_tfe_workspace ? 1 : 0
+  count = var.configure_tfe_workspace && var.set_vault_auth_vars ? 1 : 0
 
   workspace_id = var.tfe_workspace_id
   key          = "TFC_VAULT_PROVIDER_AUTH"
@@ -210,7 +211,7 @@ resource "tfe_variable" "vault_provider_auth" {
 }
 
 resource "tfe_variable" "vault_addr" {
-  count = var.configure_tfe_workspace ? 1 : 0
+  count = var.configure_tfe_workspace && var.set_vault_auth_vars ? 1 : 0
 
   workspace_id = var.tfe_workspace_id
   key          = "TFC_VAULT_ADDR"
@@ -220,13 +221,23 @@ resource "tfe_variable" "vault_addr" {
 }
 
 resource "tfe_variable" "vault_run_role" {
-  count = var.configure_tfe_workspace ? 1 : 0
+  count = var.configure_tfe_workspace && var.set_vault_auth_vars ? 1 : 0
 
   workspace_id = var.tfe_workspace_id
   key          = "TFC_VAULT_RUN_ROLE"
   value        = vault_jwt_auth_backend_role.tfe.role_name
   category     = "env"
   description  = "Vault JWT role for plan and apply"
+}
+
+resource "tfe_variable" "vault_auth_path" {
+  count = var.configure_tfe_workspace && var.set_vault_auth_vars ? 1 : 0
+
+  workspace_id = var.tfe_workspace_id
+  key          = "TFC_VAULT_AUTH_PATH"
+  value        = var.create_jwt_backend ? vault_jwt_auth_backend.tfe[0].path : var.jwt_backend_path
+  category     = "env"
+  description  = "Vault JWT auth backend path"
 }
 
 # Tells TFE to inject vault-backed AWS credentials into the workspace environment.
@@ -240,26 +251,27 @@ resource "tfe_variable" "vault_backed_aws_auth" {
   description  = "Enable vault-backed AWS dynamic credentials"
 }
 
-resource "tfe_variable" "vault_backed_aws_role" {
-  count = var.configure_tfe_workspace ? 1 : 0
-
-  workspace_id = var.tfe_workspace_id
-  key          = "TFC_VAULT_BACKED_AWS_RUN_ROLE"
-  value        = vault_jwt_auth_backend_role.tfe.role_name
-  category     = "env"
-  description  = "Vault role used to generate AWS STS credentials"
-}
-
 # The Vault AWS secrets engine role name — Vault uses this to look up which
 # IAM role to assume when generating credentials.
-resource "tfe_variable" "vault_backed_aws_secrets_role" {
+resource "tfe_variable" "vault_backed_aws_run_vault_role" {
   count = var.configure_tfe_workspace ? 1 : 0
 
   workspace_id = var.tfe_workspace_id
-  key          = "TFC_VAULT_BACKED_AWS_ROLE"
+  key          = "TFC_VAULT_BACKED_AWS_RUN_VAULT_ROLE"
   value        = vault_aws_secret_backend_role.tfe.name
   category     = "env"
   description  = "Vault AWS secrets engine role name"
+}
+
+# IAM role ARN that Vault assumes (via STS) when credential_type = assumed_role.
+resource "tfe_variable" "vault_backed_aws_run_role_arn" {
+  count = var.configure_tfe_workspace ? 1 : 0
+
+  workspace_id = var.tfe_workspace_id
+  key          = "TFC_VAULT_BACKED_AWS_RUN_ROLE_ARN"
+  value        = aws_iam_role.vault_target.arn
+  category     = "env"
+  description  = "ARN of the IAM role Vault assumes to generate STS credentials"
 }
 
 resource "tfe_variable" "vault_backed_aws_mount" {
@@ -284,8 +296,8 @@ resource "tfe_variable" "vault_backed_aws_auth_type" {
 }
 
 resource "tfe_variable" "vault_encoded_cacert" {
-  # Only inject when a CA cert is provided — omit for public CA-signed Vault TLS.
-  count = var.configure_tfe_workspace && var.vault_ca_cert_b64 != "" ? 1 : 0
+  # Only inject when a CA cert is provided and not delegated to dynamic_provider_cred.
+  count = var.configure_tfe_workspace && var.set_vault_auth_vars && var.vault_ca_cert_b64 != "" ? 1 : 0
 
   workspace_id = var.tfe_workspace_id
   key          = "TFC_VAULT_ENCODED_CACERT"
