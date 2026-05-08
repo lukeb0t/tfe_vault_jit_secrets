@@ -56,7 +56,6 @@ aws_secrets_backend_region = "us-east-1"
 
 # ARN of the Vault EC2 instance role — allows Vault to call sts:AssumeRole.
 # When using alongside vault_deploy_aws: vault_iam_user_arn = module.vault.iam_role_arn
-vault_iam_user_arn = "arn:aws:iam::123456789012:role/my-vault-server"
 ```
 
 ### With custom IAM permissions for the target role
@@ -97,31 +96,31 @@ The trust policy on the target role is managed by this module; no manual IAM cha
 | `vault_token` | Vault token used by the `vault` provider during bootstrap. Should be a root or admin token; rotate after first apply. | `string` (sensitive) | — | ✅ |
 | `tfe_hostname` | Hostname of the TFE instance (e.g. `tfe.example.com`). Works with any TFE — self-hosted or bring-your-own. | `string` | — | ✅ |
 | `tfe_organization` | TFE organization name. | `string` | — | ✅ |
+| `tfe_workspace_id` | TFE workspace ID (e.g. `ws-XXXXXXXXXXXXXXXX`). | `string` | — | ✅ |
+| `tfe_token` | TFE API token with permission to manage workspace variables. | `string` (sensitive) | — | ✅ |
 | `aws_secrets_backend_region` | AWS region the secrets engine uses for STS API calls. | `string` | — | ✅ |
 | `vault_iam_user_arn` | ARN of the IAM principal Vault authenticates as (IAM user ARN for static credentials, or IAM role ARN if Vault runs on EC2). Granted `sts:AssumeRole` on the target role. | `string` | — | ✅ |
+| `vault_aws_access_key_id` | AWS access key ID for the IAM user Vault authenticates as. Required when Vault is not on EC2 with a suitable instance profile. | `string` (sensitive) | `""` | |
+| `vault_aws_secret_access_key` | AWS secret access key paired with `vault_aws_access_key_id`. | `string` (sensitive) | `""` | |
 | `vault_namespace` | Vault namespace. Leave empty for root. | `string` | `""` | |
 | `vault_ca_cert_file` | Path to a PEM file for Vault's self-signed CA certificate. Required when Vault uses self-signed TLS. Alternatively set `VAULT_CACERT` in the environment. | `string` | `""` | |
+| `vault_ca_cert_b64` | Base64-encoded PEM CA cert for Vault. Injected as `TFC_VAULT_ENCODED_CACERT`. Required for self-signed TLS. | `string` (sensitive) | `""` | |
 | `tfe_project` | TFE project name. Use `"*"` to match all. | `string` | `"*"` | |
 | `tfe_workspace` | TFE workspace name. Use `"*"` to match all. | `string` | `"*"` | |
+| `tfe_ca_cert_pem` | PEM-encoded CA cert for TFE's self-signed TLS certificate. Needed so Vault can verify TFE's OIDC discovery endpoint when `create_jwt_backend = true`. | `string` | `""` | |
 | `jwt_backend_path` | Mount path for the JWT auth backend. | `string` | `"jwt-aws-provider"` | |
 | `vault_role_name` | Name of the Vault JWT auth role. | `string` | `"tfe-vault-backed-aws"` | |
 | `vault_policy_name` | Name of the Vault policy. | `string` | `"tfe-vault-backed-aws-policy"` | |
 | `workload_identity_audience` | Expected `aud` claim in TFE JWT tokens. | `string` | `"vault.workload.identity"` | |
 | `token_ttl_seconds` | Vault token TTL in seconds. | `number` | `1200` | |
 | `aws_secrets_backend_path` | Mount path for the Vault AWS secrets engine. | `string` | `"aws"` | |
-| `vault_aws_access_key_id` | AWS access key ID for the IAM user Vault authenticates as. Required when Vault is not on EC2 with a suitable instance profile. | `string` (sensitive) | `""` | |
-| `vault_aws_secret_access_key` | AWS secret access key paired with `vault_aws_access_key_id`. | `string` (sensitive) | `""` | |
 | `aws_secrets_role_name` | Name of the Vault AWS secrets engine role. | `string` | `"tfe-dynamic-aws-role"` | |
 | `default_sts_ttl_seconds` | Default TTL for generated STS credentials. | `number` | `3600` | |
 | `max_sts_ttl_seconds` | Maximum TTL for generated STS credentials. | `number` | `43200` | |
 | `target_iam_role_name` | Name of the AWS IAM role Vault assumes to generate credentials. | `string` | `"vault-dynamic-creds-target"` | |
 | `target_iam_policy_json` | IAM policy JSON for the target role. Defaults to a read-only EC2/S3 demo policy. | `string` | `""` | |
-| `tfe_workspace_id` | TFE workspace ID (e.g. `ws-XXXXXXXXXXXXXXXX`). | `string` | — | ✅ |
-| `tfe_token` | TFE API token with permission to manage workspace variables. | `string` (sensitive) | — | ✅ |
-| `vault_ca_cert_b64` | Base64-encoded PEM CA cert for Vault. Injected as `TFC_VAULT_ENCODED_CACERT`. Required for self-signed TLS. | `string` (sensitive) | `""` | |
 | `set_vault_auth_vars` | When `true`, also inject the generic Vault auth vars (`TFC_VAULT_PROVIDER_AUTH`, `TFC_VAULT_ADDR`, `TFC_VAULT_AUTH_PATH`, `TFC_VAULT_RUN_ROLE`). Set `false` only if another process writes those same values for this AWS flow. | `bool` | `true` | |
 | `create_jwt_backend` | When `true`, create the JWT auth backend at `jwt_backend_path`. Set `false` only to reuse an existing backend at that exact path. | `bool` | `true` | |
-| `tfe_ca_cert_pem` | PEM-encoded CA cert for TFE's self-signed TLS certificate. Needed so Vault can verify TFE's OIDC discovery endpoint when `create_jwt_backend = true`. | `string` | `""` | |
 
 ## Outputs
 

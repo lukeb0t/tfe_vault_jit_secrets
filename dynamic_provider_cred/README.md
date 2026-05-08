@@ -69,8 +69,11 @@ secret_paths = [
 | `vault_token` | Vault token used by the `vault` provider during bootstrap. Should be a root or admin token; rotate after first apply. | `string` (sensitive) | — | ✅ |
 | `tfe_hostname` | Hostname of the TFE instance (e.g. `tfe.example.com`). Works with any TFE — self-hosted or bring-your-own. Used as OIDC discovery URL and `bound_issuer`. | `string` | — | ✅ |
 | `tfe_organization` | TFE organization name. Scopes `bound_claims` to this org. | `string` | — | ✅ |
+| `tfe_workspace_id` | TFE workspace ID (e.g. `ws-XXXXXXXXXXXXXXXX`). | `string` | — | ✅ |
+| `tfe_token` | TFE API token with permission to manage workspace variables. | `string` (sensitive) | — | ✅ |
 | `vault_namespace` | Vault namespace. Leave empty for root namespace. | `string` | `""` | |
 | `vault_ca_cert_file` | Path to a PEM file for Vault's self-signed CA certificate. Required when Vault uses self-signed TLS. Alternatively set `VAULT_CACERT` in the environment. | `string` | `""` | |
+| `vault_ca_cert_b64` | Base64-encoded PEM CA certificate for Vault. Injected as `TFC_VAULT_ENCODED_CACERT`. Required for self-signed TLS. | `string` (sensitive) | `""` | |
 | `tfe_project` | TFE project name. Use `"*"` to match all projects. | `string` | `"*"` | |
 | `tfe_workspace` | TFE workspace name. Use `"*"` to match all workspaces. | `string` | `"*"` | |
 | `jwt_backend_path` | Mount path for the JWT auth backend. | `string` | `"jwt-vault-provider"` | |
@@ -80,9 +83,6 @@ secret_paths = [
 | `token_ttl_seconds` | Lifetime of Vault tokens issued to TFE. TFE renews periodically during long runs. | `number` | `1200` | |
 | `secret_paths` | Vault paths the policy grants `read` access to. | `list(string)` | `["kv/data/*"]` | |
 | `create_demo_kv_mount` | Create a KV v2 mount at `kv/` as a demonstration target. | `bool` | `true` | |
-| `tfe_workspace_id` | TFE workspace ID (e.g. `ws-XXXXXXXXXXXXXXXX`). | `string` | — | ✅ |
-| `tfe_token` | TFE API token with permission to manage workspace variables. | `string` (sensitive) | — | ✅ |
-| `vault_ca_cert_b64` | Base64-encoded PEM CA certificate for Vault. Injected as `TFC_VAULT_ENCODED_CACERT`. Required for self-signed TLS. | `string` (sensitive) | `""` | |
 
 ## Outputs
 
