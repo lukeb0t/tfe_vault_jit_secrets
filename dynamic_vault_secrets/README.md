@@ -32,81 +32,63 @@ AWS Terraform provider  (no static credentials required)
 
 ## Usage
 
-### Minimal
+This module ships with `providers.tf` pre-configured for **standalone use**. Copy `terraform.tfvars.example` to `terraform.tfvars`, fill in your values, then:
 
-```hcl
-provider "vault" {
-  address = "https://vault.example.com:8200"
-  token   = var.vault_root_token   # bootstrap only
-}
-
-provider "aws" {
-  region = "us-east-1"   # credentials for creating the target IAM role
-}
-
-module "dyn_aws" {
-  source = "./dynamic_vault_secrets"
-
-  vault_addr                 = "https://vault.example.com:8200"
-  tfe_hostname               = "tfe.example.com"
-  tfe_organization           = "my-org"
-  aws_secrets_backend_region = "us-east-1"
-
-  # ARN of the Vault EC2 instance role — allows Vault to call sts:AssumeRole
-  vault_iam_user_arn = "arn:aws:iam::123456789012:role/my-vault-server"
-}
+```sh
+cp terraform.tfvars.example terraform.tfvars
+# edit terraform.tfvars
+terraform init
+terraform apply
 ```
 
-When using alongside `vault_deploy_aws`, pass the IAM role ARN directly from that module's output:
+### Minimal `terraform.tfvars`
 
 ```hcl
-module "dyn_aws" {
-  source = "./dynamic_vault_secrets"
+vault_addr  = "https://vault.example.com:8200"
+vault_token = "hvs.XXXXXXXX"   # bootstrap token; rotate after first apply
 
-  vault_iam_user_arn = module.vault.iam_role_arn
-  # ...
-}
+# Works with any TFE instance — self-hosted via tfe_deploy_aws or bring-your-own.
+tfe_hostname     = "tfe.example.com"
+tfe_organization = "my-org"
+
+aws_secrets_backend_region = "us-east-1"
+
+# ARN of the Vault EC2 instance role — allows Vault to call sts:AssumeRole.
+# When using alongside vault_deploy_aws, use: module.vault.iam_role_arn
+vault_iam_user_arn = "arn:aws:iam::123456789012:role/my-vault-server"
 ```
 
 ### With custom IAM permissions for the target role
 
 ```hcl
-module "dyn_aws" {
-  source = "./dynamic_vault_secrets"
+target_iam_role_name = "tfe-infra-prod-role"
 
-  vault_addr                 = "https://vault.example.com:8200"
-  tfe_hostname               = "tfe.example.com"
-  tfe_organization           = "my-org"
-  tfe_workspace              = "infra-prod"
-  aws_secrets_backend_region = "us-east-1"
-  vault_iam_user_arn         = module.vault.iam_role_arn
-
-  target_iam_role_name = "tfe-infra-prod-role"
-
-  target_iam_policy_json = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["ec2:*", "s3:*", "iam:PassRole"]
-      Resource = "*"
-    }]
-  })
-}
+target_iam_policy_json = jsonencode({
+  Version = "2012-10-17"
+  Statement = [{
+    Effect   = "Allow"
+    Action   = ["ec2:*", "s3:*"]
+    Resource = "*"
+  }]
+})
 ```
 
 ### With automatic TFE workspace variable injection
 
+Set `configure_tfe_workspace = true` to have Terraform inject the required `TFC_VAULT_*` and `TFC_VAULT_BACKED_AWS_*` environment variables into the workspace automatically. Requires a TFE token with workspace-write permissions.
+
 ```hcl
-module "dyn_aws" {
-  source = "./dynamic_vault_secrets"
-
-  # ... required inputs ...
-
-  configure_tfe_workspace = true
-  tfe_workspace_id        = "ws-XXXXXXXXXXXXXXXX"
-  vault_ca_cert_b64       = base64encode(file("vault-ca.pem"))
-}
+configure_tfe_workspace = true
+tfe_workspace_id        = "ws-XXXXXXXXXXXXXXXX"
+tfe_token               = "TOKEN"   # org token or team token with manage_workspaces
+vault_ca_cert_b64       = base64encode(file("vault-ca.pem"))
 ```
+
+See [TFE workspace environment variables](#tfe-workspace-environment-variables) for the manual equivalent.
+
+### Using as a child module
+
+When calling this module from another root module (rather than running it standalone), remove `providers.tf` from this directory and configure the `vault`, `aws`, and `tfe` providers in the calling root module instead.
 
 ## Requirements
 
@@ -142,11 +124,13 @@ This is handled automatically by the trust policy set on `aws_iam_role.vault_tar
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|----------|
 | `vault_addr` | Address of the Vault server. | `string` | — | ✅ |
-| `tfe_hostname` | Hostname of the self-hosted TFE instance. | `string` | — | ✅ |
+| `vault_token` | Vault token used by the `vault` provider during bootstrap. Should be a root or admin token; rotate after first apply. | `string` (sensitive) | — | ✅ |
+| `tfe_hostname` | Hostname of the TFE instance (e.g. `tfe.example.com`). Works with any TFE — self-hosted or bring-your-own. | `string` | — | ✅ |
 | `tfe_organization` | TFE organization name. | `string` | — | ✅ |
 | `aws_secrets_backend_region` | AWS region the secrets engine uses for STS API calls. | `string` | — | ✅ |
 | `vault_iam_user_arn` | ARN of the Vault EC2 IAM role (or IAM user) permitted to assume the target role. Pass `module.vault.iam_role_arn`. | `string` | — | ✅ |
 | `vault_namespace` | Vault namespace. Leave empty for root. | `string` | `""` | |
+| `vault_ca_cert_file` | Path to a PEM file for Vault's self-signed CA certificate. Required when Vault uses self-signed TLS. Alternatively set `VAULT_CACERT` in the environment. | `string` | `""` | |
 | `tfe_project` | TFE project name. Use `"*"` to match all. | `string` | `"*"` | |
 | `tfe_workspace` | TFE workspace name. Use `"*"` to match all. | `string` | `"*"` | |
 | `jwt_backend_path` | Mount path for the JWT auth backend. | `string` | `"jwt-aws-provider"` | |
@@ -162,8 +146,9 @@ This is handled automatically by the trust policy set on `aws_iam_role.vault_tar
 | `max_sts_ttl_seconds` | Maximum TTL for generated STS credentials. | `number` | `43200` | |
 | `target_iam_role_name` | Name of the AWS IAM role Vault assumes to generate credentials. | `string` | `"vault-dynamic-creds-target"` | |
 | `target_iam_policy_json` | IAM policy JSON for the target role. Defaults to a read-only EC2/S3 demo policy. | `string` | `""` | |
-| `configure_tfe_workspace` | Create `tfe_variable` resources injecting the workspace env vars for this flow. Requires `tfe` provider. | `bool` | `false` | |
+| `configure_tfe_workspace` | Create `tfe_variable` resources injecting the workspace env vars for this flow. | `bool` | `false` | |
 | `tfe_workspace_id` | TFE workspace ID. Required when `configure_tfe_workspace = true`. | `string` | `""` | |
+| `tfe_token` | TFE API token with permission to manage workspace variables. Required when `configure_tfe_workspace = true`. | `string` (sensitive) | `""` | |
 | `vault_ca_cert_b64` | Base64-encoded PEM CA cert for self-signed Vault TLS. | `string` (sensitive) | `""` | |
 | `set_vault_auth_vars` | When `true`, also inject the generic Vault auth vars (`TFC_VAULT_PROVIDER_AUTH`, `TFC_VAULT_ADDR`, `TFC_VAULT_AUTH_PATH`, `TFC_VAULT_RUN_ROLE`). Set `false` only if another process writes those same values for this AWS flow. | `bool` | `true` | |
 | `create_jwt_backend` | When `true`, create the JWT auth backend at `jwt_backend_path`. Set `false` only to reuse an existing backend at that exact path. | `bool` | `true` | |

@@ -28,62 +28,53 @@ Vault Terraform provider  (reads secrets, manages Vault resources)
 
 ## Usage
 
-### Minimal
+This module ships with `providers.tf` pre-configured for **standalone use**. Copy `terraform.tfvars.example` to `terraform.tfvars`, fill in your values, then:
 
-```hcl
-provider "vault" {
-  address = "https://vault.example.com:8200"
-  token   = var.vault_root_token   # bootstrap only
-}
-
-module "dyn_provider" {
-  source = "./dynamic_provider_cred"
-
-  vault_addr       = "https://vault.example.com:8200"
-  tfe_hostname     = "tfe.example.com"
-  tfe_organization = "my-org"
-}
+```sh
+cp terraform.tfvars.example terraform.tfvars
+# edit terraform.tfvars
+terraform init
+terraform apply
 ```
 
-### Scoped to a specific workspace
+### Minimal `terraform.tfvars`
 
 ```hcl
-module "dyn_provider" {
-  source = "./dynamic_provider_cred"
+vault_addr  = "https://vault.example.com:8200"
+vault_token = "hvs.XXXXXXXX"   # bootstrap token; rotate after first apply
 
-  vault_addr       = "https://vault.example.com:8200"
-  tfe_hostname     = "tfe.example.com"
-  tfe_organization = "my-org"
-  tfe_project      = "platform"
-  tfe_workspace    = "infra-prod"
+# Works with any TFE instance — self-hosted via tfe_deploy_aws or bring-your-own.
+tfe_hostname     = "tfe.example.com"
+tfe_organization = "my-org"
+```
 
-  secret_paths = [
-    "kv/data/infra-prod/*",
-    "kv/data/shared/*",
-  ]
-}
+### Scoped to a specific project and workspace
+
+```hcl
+tfe_project   = "platform"
+tfe_workspace = "infra-prod"
+
+secret_paths = [
+  "kv/data/infra-prod/*",
+  "kv/data/shared/*",
+]
 ```
 
 ### With automatic TFE workspace variable injection
 
+Set `configure_tfe_workspace = true` to have Terraform inject the required `TFC_VAULT_*` environment variables into the workspace automatically. Requires a TFE token with workspace-write permissions.
+
 ```hcl
-module "dyn_provider" {
-  source = "./dynamic_provider_cred"
-
-  vault_addr       = "https://vault.example.com:8200"
-  tfe_hostname     = "tfe.example.com"
-  tfe_organization = "my-org"
-  tfe_workspace    = "my-workspace"
-
-  configure_tfe_workspace = true
-  tfe_workspace_id        = "ws-XXXXXXXXXXXXXXXX"
-
-  # For self-signed Vault TLS — base64 encode the PEM cert:
-  # vault_ca_cert_b64 = base64encode(file("vault-ca.pem"))
-}
+configure_tfe_workspace = true
+tfe_workspace_id        = "ws-XXXXXXXXXXXXXXXX"
+tfe_token               = "TOKEN"   # org token or team token with manage_workspaces
 ```
 
-> **Provider requirement:** Set `configure_tfe_workspace = true` only after uncommenting the `tfe` provider in `versions.tf` and providing a TFE token.
+See [TFE workspace environment variables](#tfe-workspace-environment-variables) for the manual equivalent.
+
+### Using as a child module
+
+When calling this module from another root module (rather than running it standalone), remove `providers.tf` from this directory and configure the `vault` and `tfe` providers in the calling root module instead.
 
 ## Requirements
 
@@ -98,9 +89,11 @@ module "dyn_provider" {
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|----------|
 | `vault_addr` | Address of the Vault server (e.g. `https://1.2.3.4:8200`). | `string` | — | ✅ |
-| `tfe_hostname` | Hostname of the self-hosted TFE instance (e.g. `tfe.example.com`). Used as OIDC discovery URL and `bound_issuer`. | `string` | — | ✅ |
+| `vault_token` | Vault token used by the `vault` provider during bootstrap. Should be a root or admin token; rotate after first apply. | `string` (sensitive) | — | ✅ |
+| `tfe_hostname` | Hostname of the TFE instance (e.g. `tfe.example.com`). Works with any TFE — self-hosted or bring-your-own. Used as OIDC discovery URL and `bound_issuer`. | `string` | — | ✅ |
 | `tfe_organization` | TFE organization name. Scopes `bound_claims` to this org. | `string` | — | ✅ |
 | `vault_namespace` | Vault namespace. Leave empty for root namespace. | `string` | `""` | |
+| `vault_ca_cert_file` | Path to a PEM file for Vault's self-signed CA certificate. Required when Vault uses self-signed TLS. Alternatively set `VAULT_CACERT` in the environment. | `string` | `""` | |
 | `tfe_project` | TFE project name. Use `"*"` to match all projects. | `string` | `"*"` | |
 | `tfe_workspace` | TFE workspace name. Use `"*"` to match all workspaces. | `string` | `"*"` | |
 | `jwt_backend_path` | Mount path for the JWT auth backend. | `string` | `"jwt-vault-provider"` | |
@@ -110,8 +103,9 @@ module "dyn_provider" {
 | `token_ttl_seconds` | Lifetime of Vault tokens issued to TFE. TFE renews periodically during long runs. | `number` | `1200` | |
 | `secret_paths` | Vault paths the policy grants `read` access to. | `list(string)` | `["kv/data/*"]` | |
 | `create_demo_kv_mount` | Create a KV v2 mount at `kv/` as a demonstration target. | `bool` | `true` | |
-| `configure_tfe_workspace` | Automatically create `tfe_variable` resources in the target workspace. Requires `tfe` provider. | `bool` | `false` | |
+| `configure_tfe_workspace` | Automatically create `tfe_variable` resources in the target workspace. | `bool` | `false` | |
 | `tfe_workspace_id` | TFE workspace ID (e.g. `ws-XXXXXXXXXXXXXXXX`). Required when `configure_tfe_workspace = true`. | `string` | `""` | |
+| `tfe_token` | TFE API token with permission to manage workspace variables. Required when `configure_tfe_workspace = true`. | `string` (sensitive) | `""` | |
 | `vault_ca_cert_b64` | Base64-encoded PEM CA certificate for Vault. Injected as `TFC_VAULT_ENCODED_CACERT`. Required for self-signed TLS. | `string` (sensitive) | `""` | |
 
 ## Outputs
