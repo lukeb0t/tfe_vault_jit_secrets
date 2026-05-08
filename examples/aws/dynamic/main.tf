@@ -15,17 +15,18 @@ module "dynamic_vault_secrets" {
   source = "../../../dynamic_vault_secrets"
 
   vault_addr       = var.vault_addr
+  vault_token      = var.vault_root_token
   tfe_hostname     = var.tfe_hostname
   tfe_organization = var.tfe_org_name
   tfe_project      = "*"
   tfe_workspace    = "*"
 
-  configure_tfe_workspace = true
-  tfe_workspace_id        = tfe_workspace.demo.id
-  vault_ca_cert_b64       = var.vault_ca_cert_b64
-  tfe_ca_cert_pem         = var.tfe_ca_cert_pem
-  create_demo_kv_mount    = true
-  secret_paths            = ["kv/data/*"]
+  tfe_workspace_id     = tfe_workspace.demo.id
+  tfe_token            = var.tfe_org_token
+  vault_ca_cert_b64    = var.vault_ca_cert_b64
+  tfe_ca_cert_pem      = var.tfe_ca_cert_pem
+  create_demo_kv_mount = true
+  secret_paths         = ["kv/data/*"]
 }
 
 # ─── Use Case 2: Vault-backed AWS Dynamic Secrets ───────────────────────────
@@ -37,6 +38,7 @@ module "dynamic_aws_provider_secrets" {
   source = "../../../dynamic_aws_provider_secrets"
 
   vault_addr                 = var.vault_addr
+  vault_token                = var.vault_root_token
   tfe_hostname               = var.tfe_hostname
   tfe_organization           = var.tfe_org_name
   tfe_project                = "*"
@@ -44,12 +46,10 @@ module "dynamic_aws_provider_secrets" {
   aws_secrets_backend_region = var.aws_region
   vault_iam_user_arn         = var.vault_iam_role_arn
 
-  configure_tfe_workspace = true
-  tfe_workspace_id        = tfe_workspace.demo.id
-  vault_ca_cert_b64       = var.vault_ca_cert_b64
-  tfe_ca_cert_pem         = var.tfe_ca_cert_pem
-  # The demo workspace above is only a combined-variable example; the dedicated
-  # aws_test workspace below sets the AWS flow's auth path and run role explicitly.
+  tfe_workspace_id  = tfe_workspace.demo.id
+  tfe_token         = var.tfe_org_token
+  vault_ca_cert_b64 = var.vault_ca_cert_b64
+  tfe_ca_cert_pem   = var.tfe_ca_cert_pem
   set_vault_auth_vars = false
 }
 
@@ -76,6 +76,7 @@ resource "tfe_workspace" "kv_test" {
   name         = "vault-kv-test"
   organization = var.tfe_org_name
   auto_apply   = true
+  force_delete = true
   description  = "Test: vault provider dynamic creds — reads KV secret from Vault"
 }
 
@@ -124,6 +125,7 @@ resource "tfe_workspace" "aws_test" {
   name         = "aws-creds-test"
   organization = var.tfe_org_name
   auto_apply   = true
+  force_delete = true
   description  = "Test: vault-backed AWS dynamic creds — lists AZs via STS credentials"
 }
 
