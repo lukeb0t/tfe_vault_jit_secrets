@@ -28,7 +28,7 @@ Vault Terraform provider  (reads secrets, manages Vault resources)
 
 ## Usage
 
-This module ships with `providers.tf` pre-configured for **standalone use**. Copy `terraform.tfvars.example` to `terraform.tfvars`, fill in your values, then:
+Copy `terraform.tfvars.example` to `terraform.tfvars`, fill in your values, then:
 
 ```sh
 cp terraform.tfvars.example terraform.tfvars
@@ -43,9 +43,10 @@ terraform apply
 vault_addr  = "https://vault.example.com:8200"
 vault_token = "hvs.XXXXXXXX"   # bootstrap token; rotate after first apply
 
-# Works with any TFE instance — self-hosted via tfe_deploy_aws or bring-your-own.
-tfe_hostname     = "tfe.example.com"
+tfe_hostname     = "tfe.example.com"   # any TFE instance — self-hosted or bring-your-own
 tfe_organization = "my-org"
+tfe_workspace_id = "ws-XXXXXXXXXXXXXXXX"
+tfe_token        = "TOKEN"
 ```
 
 ### Scoped to a specific project and workspace
@@ -59,29 +60,6 @@ secret_paths = [
   "kv/data/shared/*",
 ]
 ```
-
-### With automatic TFE workspace variable injection
-
-Terraform injects the required `TFC_VAULT_*` environment variables into the workspace on every apply. Supply the workspace ID and a TFE token with workspace-write permissions:
-
-```hcl
-tfe_workspace_id = "ws-XXXXXXXXXXXXXXXX"
-tfe_token        = "TOKEN"   # org token or team token with manage_workspaces
-```
-
-See [TFE workspace environment variables](#tfe-workspace-environment-variables) for the manual equivalent.
-
-### Using as a child module
-
-When calling this module from another root module (rather than running it standalone), remove `providers.tf` from this directory and configure the `vault` and `tfe` providers in the calling root module instead.
-
-## Requirements
-
-| Name | Version |
-|------|---------|
-| terraform | >= 1.5.0 |
-| hashicorp/vault | ~> 4.0 |
-| hashicorp/tfe | ~> 0.57 |
 
 ## Inputs
 

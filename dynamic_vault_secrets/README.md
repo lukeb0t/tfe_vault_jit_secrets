@@ -32,7 +32,7 @@ AWS Terraform provider  (no static credentials required)
 
 ## Usage
 
-This module ships with `providers.tf` pre-configured for **standalone use**. Copy `terraform.tfvars.example` to `terraform.tfvars`, fill in your values, then:
+Copy `terraform.tfvars.example` to `terraform.tfvars`, fill in your values, then:
 
 ```sh
 cp terraform.tfvars.example terraform.tfvars
@@ -47,14 +47,15 @@ terraform apply
 vault_addr  = "https://vault.example.com:8200"
 vault_token = "hvs.XXXXXXXX"   # bootstrap token; rotate after first apply
 
-# Works with any TFE instance — self-hosted via tfe_deploy_aws or bring-your-own.
-tfe_hostname     = "tfe.example.com"
+tfe_hostname     = "tfe.example.com"   # any TFE instance — self-hosted or bring-your-own
 tfe_organization = "my-org"
+tfe_workspace_id = "ws-XXXXXXXXXXXXXXXX"
+tfe_token        = "TOKEN"
 
 aws_secrets_backend_region = "us-east-1"
 
 # ARN of the Vault EC2 instance role — allows Vault to call sts:AssumeRole.
-# When using alongside vault_deploy_aws, use: module.vault.iam_role_arn
+# When using alongside vault_deploy_aws: vault_iam_user_arn = module.vault.iam_role_arn
 vault_iam_user_arn = "arn:aws:iam::123456789012:role/my-vault-server"
 ```
 
@@ -73,30 +74,6 @@ target_iam_policy_json = jsonencode({
 })
 ```
 
-### With automatic TFE workspace variable injection
-
-Terraform injects the required `TFC_VAULT_*` and `TFC_VAULT_BACKED_AWS_*` environment variables into the workspace on every apply. Supply the workspace ID and a TFE token with workspace-write permissions:
-
-```hcl
-tfe_workspace_id = "ws-XXXXXXXXXXXXXXXX"
-tfe_token        = "TOKEN"   # org token or team token with manage_workspaces
-vault_ca_cert_b64 = base64encode(file("vault-ca.pem"))
-```
-
-See [TFE workspace environment variables](#tfe-workspace-environment-variables) for the manual equivalent.
-
-### Using as a child module
-
-When calling this module from another root module (rather than running it standalone), remove `providers.tf` from this directory and configure the `vault`, `aws`, and `tfe` providers in the calling root module instead.
-
-## Requirements
-
-| Name | Version |
-|------|---------|
-| terraform | >= 1.5.0 |
-| hashicorp/aws | ~> 5.0 |
-| hashicorp/vault | ~> 4.0 |
-| hashicorp/tfe | ~> 0.57 |
 
 ### AWS permissions required by the caller
 
