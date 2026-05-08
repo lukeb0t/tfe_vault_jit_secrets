@@ -81,19 +81,13 @@ To create the target IAM role, the Terraform principal needs:
 
 - `iam:CreateRole`, `iam:PutRolePolicy`, `iam:DeleteRole`, `iam:DeleteRolePolicy`
 
-### AWS permissions required by the Vault EC2 role
+### AWS permissions required by Vault
 
-The Vault instance profile must be allowed to assume the target role:
+Vault needs an IAM principal (user or role) that can call `sts:AssumeRole` on the target role. Supply its credentials via `vault_aws_access_key_id` / `vault_aws_secret_access_key`, and set `vault_iam_user_arn` to that principal's ARN so the target role's trust policy allows it.
 
-```json
-{
-  "Effect": "Allow",
-  "Action": "sts:AssumeRole",
-  "Resource": "arn:aws:iam::<account>:role/<target_iam_role_name>"
-}
-```
+If Vault happens to run on EC2 in the same AWS account, you can omit the static credentials and set `vault_iam_user_arn` to the instance role ARN instead — Vault will use the instance profile automatically.
 
-This is handled automatically by the trust policy set on `aws_iam_role.vault_target` — the module grants `vault_iam_user_arn` assume rights.
+The trust policy on the target role is managed by this module; no manual IAM changes are required.
 
 ## Inputs
 
@@ -104,7 +98,7 @@ This is handled automatically by the trust policy set on `aws_iam_role.vault_tar
 | `tfe_hostname` | Hostname of the TFE instance (e.g. `tfe.example.com`). Works with any TFE — self-hosted or bring-your-own. | `string` | — | ✅ |
 | `tfe_organization` | TFE organization name. | `string` | — | ✅ |
 | `aws_secrets_backend_region` | AWS region the secrets engine uses for STS API calls. | `string` | — | ✅ |
-| `vault_iam_user_arn` | ARN of the Vault EC2 IAM role (or IAM user) permitted to assume the target role. Pass `module.vault.iam_role_arn`. | `string` | — | ✅ |
+| `vault_iam_user_arn` | ARN of the IAM principal Vault authenticates as (IAM user ARN for static credentials, or IAM role ARN if Vault runs on EC2). Granted `sts:AssumeRole` on the target role. | `string` | — | ✅ |
 | `vault_namespace` | Vault namespace. Leave empty for root. | `string` | `""` | |
 | `vault_ca_cert_file` | Path to a PEM file for Vault's self-signed CA certificate. Required when Vault uses self-signed TLS. Alternatively set `VAULT_CACERT` in the environment. | `string` | `""` | |
 | `tfe_project` | TFE project name. Use `"*"` to match all. | `string` | `"*"` | |
@@ -115,8 +109,8 @@ This is handled automatically by the trust policy set on `aws_iam_role.vault_tar
 | `workload_identity_audience` | Expected `aud` claim in TFE JWT tokens. | `string` | `"vault.workload.identity"` | |
 | `token_ttl_seconds` | Vault token TTL in seconds. | `number` | `1200` | |
 | `aws_secrets_backend_path` | Mount path for the Vault AWS secrets engine. | `string` | `"aws"` | |
-| `vault_aws_access_key_id` | Static AWS access key for Vault (leave empty to use EC2 instance profile). | `string` (sensitive) | `""` | |
-| `vault_aws_secret_access_key` | Static AWS secret key for Vault (leave empty to use EC2 instance profile). | `string` (sensitive) | `""` | |
+| `vault_aws_access_key_id` | AWS access key ID for the IAM user Vault authenticates as. Required when Vault is not on EC2 with a suitable instance profile. | `string` (sensitive) | `""` | |
+| `vault_aws_secret_access_key` | AWS secret access key paired with `vault_aws_access_key_id`. | `string` (sensitive) | `""` | |
 | `aws_secrets_role_name` | Name of the Vault AWS secrets engine role. | `string` | `"tfe-dynamic-aws-role"` | |
 | `default_sts_ttl_seconds` | Default TTL for generated STS credentials. | `number` | `3600` | |
 | `max_sts_ttl_seconds` | Maximum TTL for generated STS credentials. | `number` | `43200` | |

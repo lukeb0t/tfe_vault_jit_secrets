@@ -48,16 +48,15 @@ locals {
 
 # ─── Vault AWS Secrets Engine ────────────────────────────────────────────────
 # Vault uses this backend to call STS on behalf of TFE workspaces.
-# When access_key/secret_key are omitted, Vault uses the EC2 instance profile
-# of the vault_deploy_aws instance — no static IAM user credentials needed.
+# Provide access_key/secret_key for the IAM principal Vault authenticates as.
+# If Vault happens to run on EC2 in the same AWS account, these can be omitted
+# and Vault will fall back to the instance profile — but that is not required.
 
 resource "vault_aws_secret_backend" "aws" {
   path        = var.aws_secrets_backend_path
   description = "AWS secrets engine — vault-backed dynamic credentials for TFE"
   region      = var.aws_secrets_backend_region
 
-  # Leave these null to inherit credentials from the Vault EC2 instance profile.
-  # Only set if Vault is not running on EC2 or has no suitable instance profile.
   access_key = var.vault_aws_access_key_id != "" ? var.vault_aws_access_key_id : null
   secret_key = var.vault_aws_secret_access_key != "" ? var.vault_aws_secret_access_key : null
 
@@ -157,9 +156,8 @@ resource "vault_jwt_auth_backend_role" "tfe" {
 
 # ─── AWS IAM — Target Role ────────────────────────────────────────────────────
 # Vault assumes this role to generate the STS credentials injected into TFE.
-# The trust policy allows the Vault IAM principal (EC2 role or IAM user) to
-# assume it — set vault_iam_user_arn to module.vault.iam_role_arn when using
-# the vault_deploy_aws module alongside this one.
+# The trust policy grants vault_iam_user_arn (the IAM principal Vault
+# authenticates as — an IAM user or role) permission to assume this role.
 
 resource "aws_iam_role" "vault_target" {
   name        = var.target_iam_role_name
@@ -172,8 +170,6 @@ resource "aws_iam_role" "vault_target" {
         Sid    = "AllowVaultToAssume"
         Effect = "Allow"
         Principal = {
-          # Typically the Vault EC2 instance role ARN (module.vault.iam_role_arn).
-          # Can also be an IAM user ARN if Vault uses static credentials.
           AWS = var.vault_iam_user_arn
         }
         Action = "sts:AssumeRole"

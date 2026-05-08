@@ -100,14 +100,14 @@ variable "aws_secrets_backend_region" {
 }
 
 variable "vault_aws_access_key_id" {
-  description = "AWS access key ID for the Vault IAM user. Leave empty to rely on the Vault EC2 instance profile."
+  description = "AWS access key ID for the IAM user Vault authenticates as when calling STS. Required when Vault is not running on EC2 with a suitable instance profile."
   type        = string
   sensitive   = true
   default     = ""
 }
 
 variable "vault_aws_secret_access_key" {
-  description = "AWS secret access key for the Vault IAM user. Leave empty to rely on the Vault EC2 instance profile."
+  description = "AWS secret access key for the IAM user Vault authenticates as when calling STS. Required when vault_aws_access_key_id is set."
   type        = string
   sensitive   = true
   default     = ""
@@ -142,7 +142,7 @@ variable "target_iam_role_name" {
 }
 
 variable "vault_iam_user_arn" {
-  description = "ARN of the Vault IAM user (or the Vault EC2 instance role ARN) that is allowed to assume the target IAM role."
+  description = "ARN of the IAM principal Vault authenticates as (IAM user ARN when using static credentials, or IAM role ARN when Vault runs on EC2). This principal is granted sts:AssumeRole on the target role."
   type        = string
 }
 
