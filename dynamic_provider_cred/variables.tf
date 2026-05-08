@@ -72,7 +72,7 @@ variable "vault_policy_name" {
 variable "secret_paths" {
   description = "Vault secret paths the policy should grant read access to (e.g. ['kv/data/myapp/*']). For the built-in demo KV mount, include kv/data/*."
   type        = list(string)
-  default     = ["secret/data/*"]
+  default     = ["kv/data/*"]
 }
 
 # ─── TFE Workspace Variable Injection ──────────────────────────────────────

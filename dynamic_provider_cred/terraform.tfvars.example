@@ -8,14 +8,14 @@ tfe_organization = "my-org"
 tfe_project      = "*"   # scope to a specific project name in production
 tfe_workspace    = "*"   # scope to a specific workspace name in production
 
-jwt_backend_path           = "jwt"
+jwt_backend_path           = "jwt-vault-provider"
 vault_role_name            = "tfe-dynamic-creds"
 vault_policy_name          = "tfe-dynamic-creds-policy"
 workload_identity_audience = "vault.workload.identity"
 token_ttl_seconds          = 1200
 
-# Paths this policy grants read access to
-secret_paths = ["secret/data/*"]
+# Paths this policy grants read access to — matches the demo KV mount at kv/
+secret_paths = ["kv/data/*"]
 
 create_demo_kv_mount = true
 

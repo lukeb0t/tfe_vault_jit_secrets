@@ -8,7 +8,7 @@ tfe_organization = "my-org"
 tfe_project      = "*"
 tfe_workspace    = "*"
 
-jwt_backend_path           = "jwt"
+jwt_backend_path           = "jwt-aws-provider"
 vault_role_name            = "tfe-vault-backed-aws"
 vault_policy_name          = "tfe-vault-backed-aws-policy"
 workload_identity_audience = "vault.workload.identity"

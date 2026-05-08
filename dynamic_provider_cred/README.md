@@ -108,7 +108,7 @@ module "dyn_provider" {
 | `vault_policy_name` | Name of the Vault policy attached to the role. | `string` | `"tfe-dynamic-creds-policy"` | |
 | `workload_identity_audience` | Expected `aud` claim in TFE JWT tokens. Must match `TFC_VAULT_WORKLOAD_IDENTITY_AUDIENCE` if overridden. | `string` | `"vault.workload.identity"` | |
 | `token_ttl_seconds` | Lifetime of Vault tokens issued to TFE. TFE renews periodically during long runs. | `number` | `1200` | |
-| `secret_paths` | Vault paths the policy grants `read` access to. For the built-in demo KV mount, include `kv/data/*`. | `list(string)` | `["secret/data/*"]` | |
+| `secret_paths` | Vault paths the policy grants `read` access to. | `list(string)` | `["kv/data/*"]` | |
 | `create_demo_kv_mount` | Create a KV v2 mount at `kv/` as a demonstration target. | `bool` | `true` | |
 | `configure_tfe_workspace` | Automatically create `tfe_variable` resources in the target workspace. Requires `tfe` provider. | `bool` | `false` | |
 | `tfe_workspace_id` | TFE workspace ID (e.g. `ws-XXXXXXXXXXXXXXXX`). Required when `configure_tfe_workspace = true`. | `string` | `""` | |
