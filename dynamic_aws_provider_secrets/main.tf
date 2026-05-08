@@ -246,6 +246,15 @@ resource "tfe_variable" "vault_backed_aws_auth" {
   description  = "Enable vault-backed AWS dynamic credentials"
 }
 
+# JWT auth mount path used specifically by the vault-backed AWS flow.
+resource "tfe_variable" "vault_backed_aws_auth_path" {
+  workspace_id = var.tfe_workspace_id
+  key          = "TFC_VAULT_BACKED_AWS_AUTH_PATH"
+  value        = var.create_jwt_backend ? vault_jwt_auth_backend.tfe[0].path : var.jwt_backend_path
+  category     = "env"
+  description  = "Vault JWT auth backend path for vault-backed AWS credentials"
+}
+
 # The Vault AWS secrets engine role name — Vault uses this to look up which
 # IAM role to assume when generating credentials.
 resource "tfe_variable" "vault_backed_aws_run_vault_role" {

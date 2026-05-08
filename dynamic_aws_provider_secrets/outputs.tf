@@ -31,14 +31,15 @@ output "target_iam_role_arn" {
 output "tfe_workspace_env_vars" {
   description = "Map of the non-sensitive workspace env vars for this flow. Add TFC_VAULT_ENCODED_CACERT and TFC_VAULT_NAMESPACE separately when needed."
   value = {
-    TFC_VAULT_PROVIDER_AUTH                = "true"
-    TFC_VAULT_ADDR                         = var.vault_addr
-    TFC_VAULT_AUTH_PATH                    = var.jwt_backend_path
-    TFC_VAULT_RUN_ROLE                     = vault_jwt_auth_backend_role.tfe.role_name
-    TFC_VAULT_BACKED_AWS_AUTH              = "true"
-    TFC_VAULT_BACKED_AWS_AUTH_TYPE         = "assumed_role"
-    TFC_VAULT_BACKED_AWS_RUN_VAULT_ROLE    = vault_aws_secret_backend_role.tfe.name
-    TFC_VAULT_BACKED_AWS_MOUNT_PATH        = vault_aws_secret_backend.aws.path
-    TFC_VAULT_BACKED_AWS_RUN_ROLE_ARN      = aws_iam_role.vault_target.arn
+    TFC_VAULT_PROVIDER_AUTH             = "true"
+    TFC_VAULT_ADDR                      = var.vault_addr
+    TFC_VAULT_AUTH_PATH                 = var.jwt_backend_path
+    TFC_VAULT_RUN_ROLE                  = vault_jwt_auth_backend_role.tfe.role_name
+    TFC_VAULT_BACKED_AWS_AUTH           = "true"
+    TFC_VAULT_BACKED_AWS_AUTH_PATH      = var.jwt_backend_path
+    TFC_VAULT_BACKED_AWS_AUTH_TYPE      = "assumed_role"
+    TFC_VAULT_BACKED_AWS_RUN_VAULT_ROLE = vault_aws_secret_backend_role.tfe.name
+    TFC_VAULT_BACKED_AWS_MOUNT_PATH     = vault_aws_secret_backend.aws.path
+    TFC_VAULT_BACKED_AWS_RUN_ROLE_ARN   = aws_iam_role.vault_target.arn
   }
 }

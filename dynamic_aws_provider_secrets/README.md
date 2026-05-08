@@ -146,6 +146,7 @@ For manual setup, set these in the TFE workspace instead:
 | `TFC_VAULT_RUN_ROLE` | `tfe-vault-backed-aws` | Must match `vault_role_name` |
 | `TFC_VAULT_NAMESPACE` | `""` | Omit for the root namespace |
 | `TFC_VAULT_BACKED_AWS_AUTH` | `true` | Enables vault-backed AWS credential injection |
+| `TFC_VAULT_BACKED_AWS_AUTH_PATH` | `jwt-aws-provider` | Must match the JWT backend used by this AWS flow |
 | `TFC_VAULT_BACKED_AWS_AUTH_TYPE` | `assumed_role` | Must match secrets engine `credential_type` |
 | `TFC_VAULT_BACKED_AWS_MOUNT_PATH` | `aws` | Must match `aws_secrets_backend_path` |
 | `TFC_VAULT_BACKED_AWS_RUN_VAULT_ROLE` | `tfe-dynamic-aws-role` | Must match `aws_secrets_role_name` |

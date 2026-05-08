@@ -4,7 +4,7 @@
 resource "tfe_workspace" "demo" {
   name         = "vault-dynamic-creds-demo"
   organization = var.tfe_org_name
-  auto_apply   = false  # require manual approval for safety
+  auto_apply   = false # require manual approval for safety
   description  = "Demo workspace showing Vault dynamic credential variables"
 }
 
@@ -46,10 +46,10 @@ module "dynamic_aws_provider_secrets" {
   aws_secrets_backend_region = var.aws_region
   vault_iam_user_arn         = var.vault_iam_role_arn
 
-  tfe_workspace_id  = tfe_workspace.demo.id
-  tfe_token         = var.tfe_org_token
-  vault_ca_cert_b64 = var.vault_ca_cert_b64
-  tfe_ca_cert_pem   = var.tfe_ca_cert_pem
+  tfe_workspace_id    = tfe_workspace.demo.id
+  tfe_token           = var.tfe_org_token
+  vault_ca_cert_b64   = var.vault_ca_cert_b64
+  tfe_ca_cert_pem     = var.tfe_ca_cert_pem
   set_vault_auth_vars = false
 }
 
@@ -175,6 +175,13 @@ resource "tfe_variable" "aws_test_backed_aws_auth" {
   category     = "env"
 }
 
+resource "tfe_variable" "aws_test_backed_aws_auth_path" {
+  workspace_id = tfe_workspace.aws_test.id
+  key          = "TFC_VAULT_BACKED_AWS_AUTH_PATH"
+  value        = module.dynamic_aws_provider_secrets.jwt_backend_path
+  category     = "env"
+}
+
 resource "tfe_variable" "aws_test_backed_aws_auth_type" {
   workspace_id = tfe_workspace.aws_test.id
   key          = "TFC_VAULT_BACKED_AWS_AUTH_TYPE"
@@ -235,7 +242,7 @@ resource "null_resource" "upload_kv_test_config" {
   }
 
   provisioner "local-exec" {
-    command = <<-EOF
+    command     = <<-EOF
       set -e
       WORK=$(mktemp -d)
       cp "${local.test_dir}/vault-kv-test/main.tf" "$WORK/"
@@ -278,7 +285,7 @@ resource "null_resource" "upload_aws_test_config" {
   }
 
   provisioner "local-exec" {
-    command = <<-EOF
+    command     = <<-EOF
       set -e
       WORK=$(mktemp -d)
       cp "${local.test_dir}/aws-creds-test/main.tf" "$WORK/"
@@ -312,6 +319,7 @@ resource "null_resource" "upload_aws_test_config" {
     tfe_variable.aws_test_vault_run_role,
     tfe_variable.aws_test_vault_cacert,
     tfe_variable.aws_test_backed_aws_auth,
+    tfe_variable.aws_test_backed_aws_auth_path,
     tfe_variable.aws_test_backed_aws_auth_type,
     tfe_variable.aws_test_backed_aws_run_vault_role,
     tfe_variable.aws_test_backed_aws_mount,

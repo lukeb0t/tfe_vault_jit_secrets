@@ -79,6 +79,18 @@ mkdir -p /var/lib/tfe
 log "Pulling TFE image $TFE_VERSION..."
 docker pull "images.releases.hashicorp.com/hashicorp/terraform-enterprise:$TFE_VERSION"
 
+log "Building local TFE run pipeline image with writable /tmp/terraform..."
+mkdir -p /tmp/tfc-agent-image
+cat > /tmp/tfc-agent-image/Dockerfile << 'WORKERDOCKERFILE'
+FROM hashicorp/tfc-agent:latest
+USER root
+RUN mkdir -p /tmp/terraform && chmod 1777 /tmp /tmp/terraform
+VOLUME ["/tmp/terraform"]
+ENV TMPDIR=/tmp/terraform
+USER tfc-agent
+WORKERDOCKERFILE
+docker build -t local/tfc-agent:tmp-terraform /tmp/tfc-agent-image
+
 mkdir -p /etc/tfe
 log "Writing Docker Compose configuration..."
 cat > /etc/tfe/compose.yaml << 'COMPOSEYML'
@@ -91,16 +103,21 @@ services:
       TFE_HOSTNAME: "${tfe_hostname}"
       TFE_OPERATIONAL_MODE: "disk"
       TFE_DISK_PATH: "/var/lib/terraform-enterprise"
-      TFE_DISK_CACHE_VOLUME_NAME: "terraform-enterprise-cache"
+      TFE_DISK_CACHE_VOLUME_NAME: "terraform-enterprise_terraform-enterprise-cache"
+      TFE_DISK_CACHE_PATH: "/tmp/terraform"
+      TFE_RUN_PIPELINE_IMAGE: "local/tfc-agent:tmp-terraform"
       TFE_ENCRYPTION_PASSWORD: "${iact_token}"
       TFE_TLS_CERT_FILE: "/etc/ssl/private/terraform-enterprise/cert.pem"
       TFE_TLS_KEY_FILE: "/etc/ssl/private/terraform-enterprise/key.pem"
       TFE_TLS_CA_BUNDLE_FILE: "/etc/ssl/private/terraform-enterprise/bundle.pem"
       TFE_IACT_SUBNETS: "0.0.0.0/0"
       TFE_IACT_TOKEN: "${iact_token}"
+      TMPDIR: "/tmp/terraform"
     cap_add:
       - IPC_LOCK
-    read_only: true
+    # Keep root filesystem writable so Terraform binary downloads used by runs
+    # can create temporary files under /tmp without "read-only file system" errors.
+    read_only: false
     tmpfs:
       - /tmp:mode=01777
       - /run:mode=01777
@@ -120,15 +137,50 @@ services:
         target: /var/lib/terraform-enterprise
       - type: volume
         source: terraform-enterprise-cache
-        target: /var/cache/terraform-enterprise
+        target: /tmp/terraform
 
 volumes:
   terraform-enterprise-cache:
+    name: terraform-enterprise_terraform-enterprise-cache
 COMPOSEYML
 log "Compose file written to /etc/tfe/compose.yaml"
 
 log "Starting TFE with Docker Compose..."
 docker compose -f /etc/tfe/compose.yaml up -d
+
+# Task-worker mounts /tmp/terraform into agent-run containers.
+# Force this mount to read-write so tfc-agent-core can create plugin temp files.
+log "Patching task-worker cache volume mount to read-write..."
+for i in $(seq 1 60); do
+  if docker ps --format '{{.Names}}' | grep -qx 'terraform-enterprise-tfe-1'; then
+    break
+  fi
+  sleep 2
+done
+
+if docker ps --format '{{.Names}}' | grep -qx 'terraform-enterprise-tfe-1'; then
+  docker exec terraform-enterprise-tfe-1 sh -lc '
+    set +e
+    for i in $(seq 1 60); do
+      if [ -f /etc/task-worker/config.hcl.tmpl ]; then
+        sed -i "s/readonly = \"true\"/readonly = \"false\"/g" /etc/task-worker/config.hcl.tmpl
+        break
+      fi
+      sleep 2
+    done
+    for i in $(seq 1 60); do
+      if [ -f /run/terraform-enterprise/task-worker/config.hcl ]; then
+        sed -i "s/readonly = \"true\"/readonly = \"false\"/g" /run/terraform-enterprise/task-worker/config.hcl
+        supervisorctl restart task-worker || true
+        break
+      fi
+      sleep 2
+    done
+    exit 0
+  ' || log "WARNING: task-worker patch command failed; bootstrap continuing"
+else
+  log "WARNING: terraform-enterprise container not running in time; skipping task-worker patch"
+fi
 
 log "Waiting for TFE to become healthy (this may take 10-15 minutes)..."
 for i in $(seq 1 60); do
@@ -156,10 +208,28 @@ ADMIN_RESP=$(curl -sk \
 
 ADMIN_TOKEN=$(echo "$ADMIN_RESP" | jq -r '.token // empty')
 if [ -z "$ADMIN_TOKEN" ]; then
-  log "ERROR: Failed to create admin user. Response: $ADMIN_RESP"
-  exit 1
+  log "Initial admin creation did not return a token; trying existing admin token from SSM..."
+  ADMIN_TOKEN=$(aws ssm get-parameter \
+    --region "$REGION" \
+    --name "$SSM_PREFIX/admin-token" \
+    --with-decryption \
+    --query Parameter.Value \
+    --output text 2>/dev/null || true)
+  if [ -z "$ADMIN_TOKEN" ]; then
+    log "ERROR: Failed to create admin user and no existing admin token found. Response: $ADMIN_RESP"
+    exit 1
+  fi
+  ADMIN_STATUS=$(curl -sk -o /dev/null -w "%%{http_code}" \
+    --header "Authorization: Bearer $ADMIN_TOKEN" \
+    "https://$TFE_HOSTNAME/api/v2/account/details" || true)
+  if [ "$ADMIN_STATUS" != "200" ]; then
+    log "ERROR: Existing admin token is invalid (HTTP $ADMIN_STATUS). Response: $ADMIN_RESP"
+    exit 1
+  fi
+  log "Using existing valid admin token from SSM"
+else
+  log "Admin user created successfully"
 fi
-log "Admin user created successfully"
 
 log "Storing admin token in SSM: $SSM_PREFIX/admin-token"
 aws ssm put-parameter \
@@ -180,11 +250,14 @@ ORG_RESP=$(curl -sk \
   "https://$TFE_HOSTNAME/api/v2/organizations")
 
 ORG_NAME_RESP=$(echo "$ORG_RESP" | jq -r '.data.attributes.name // empty')
-if [ -z "$ORG_NAME_RESP" ]; then
+if [ -n "$ORG_NAME_RESP" ]; then
+  log "Organization '$ORG_NAME_RESP' created"
+elif echo "$ORG_RESP" | jq -e '.errors[]? | select(.status=="422")' >/dev/null 2>&1; then
+  log "Organization '$ORG_NAME' already exists; continuing"
+else
   log "ERROR: Failed to create organization. Response: $ORG_RESP"
   exit 1
 fi
-log "Organization '$ORG_NAME_RESP' created"
 
 log "Creating organization API token..."
 TOKEN_RESP=$(curl -sk \
