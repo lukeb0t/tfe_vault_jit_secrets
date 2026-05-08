@@ -59,3 +59,8 @@ output "subnet_id" {
   description = "ID of the public subnet used by this deployment."
   value       = local.subnet_id_resolved
 }
+
+output "ssm_tls_cert_b64_path" {
+  description = "SSM Parameter Store path of the base64-encoded Vault TLS certificate. Read with aws_ssm_parameter to pass as vault_ca_cert_b64 to dynamic modules."
+  value       = "${local.ssm_prefix}/tls_cert_b64"
+}

@@ -48,7 +48,7 @@ locals {
 # ─── Vault AWS Secrets Engine ────────────────────────────────────────────────
 # Vault uses this backend to call STS on behalf of TFE workspaces.
 # When access_key/secret_key are omitted, Vault uses the EC2 instance profile
-# of the vault_deploy instance — no static IAM user credentials needed.
+# of the vault_deploy_aws instance — no static IAM user credentials needed.
 
 resource "vault_aws_secret_backend" "aws" {
   path        = var.aws_secrets_backend_path
@@ -157,7 +157,7 @@ resource "vault_jwt_auth_backend_role" "tfe" {
 # Vault assumes this role to generate the STS credentials injected into TFE.
 # The trust policy allows the Vault IAM principal (EC2 role or IAM user) to
 # assume it — set vault_iam_user_arn to module.vault.iam_role_arn when using
-# the vault_deploy module alongside this one.
+# the vault_deploy_aws module alongside this one.
 
 resource "aws_iam_role" "vault_target" {
   name        = var.target_iam_role_name

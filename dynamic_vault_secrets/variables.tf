@@ -38,9 +38,9 @@ variable "tfe_workspace" {
 # ─── Vault JWT Auth Backend ────────────────────────────────────────────────
 
 variable "jwt_backend_path" {
-  description = "Mount path for the JWT auth backend."
+  description = "Mount path for the JWT auth backend. Must be unique within the Vault instance; use a distinct value when deploying alongside dynamic_provider_cred."
   type        = string
-  default     = "jwt"
+  default     = "jwt-aws-provider"
 }
 
 variable "vault_role_name" {
@@ -151,5 +151,23 @@ variable "vault_ca_cert_b64" {
   description = "Base64-encoded PEM CA certificate for Vault. Injected as TFC_VAULT_ENCODED_CACERT when non-empty."
   type        = string
   sensitive   = true
+  default     = ""
+}
+
+variable "set_vault_auth_vars" {
+  description = "When true, sets the generic Vault auth workspace vars (TFC_VAULT_PROVIDER_AUTH, TFC_VAULT_ADDR, TFC_VAULT_RUN_ROLE, TFC_VAULT_ENCODED_CACERT). Set to false when using dynamic_provider_cred alongside this module to avoid duplicate workspace variable errors."
+  type        = bool
+  default     = true
+}
+
+variable "create_jwt_backend" {
+  description = "When true, creates the Vault JWT auth backend at jwt_backend_path. Set to false only when an external module already manages a JWT backend at the same path and you want to reuse it."
+  type        = bool
+  default     = true
+}
+
+variable "tfe_ca_cert_pem" {
+  description = "PEM-encoded CA certificate for TFE's self-signed TLS cert. Used for the OIDC discovery CA when create_jwt_backend = true."
+  type        = string
   default     = ""
 }

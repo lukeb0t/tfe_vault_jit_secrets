@@ -89,6 +89,17 @@ chown 100:1000 /opt/vault/certs/vault.crt /opt/vault/certs/vault.key
 rm -f /tmp/vault-openssl.cnf
 log "TLS certificate written to /opt/vault/certs/"
 
+log "Storing TLS certificate in SSM: $SSM_PREFIX/tls_cert_b64"
+base64 /opt/vault/certs/vault.crt > /tmp/vault_cert_b64.txt
+aws ssm put-parameter \
+  --region "$AWS_REGION" \
+  --name "$SSM_PREFIX/tls_cert_b64" \
+  --description "Vault TLS certificate (base64) — ${cluster_name}" \
+  --value "$(cat /tmp/vault_cert_b64.txt)" \
+  --type "String" \
+  --overwrite
+rm -f /tmp/vault_cert_b64.txt
+
 # ─── Vault configuration ─────────────────────────────────────────────────────
 log "Writing Vault configuration..."
 cat > /opt/vault/config/vault.hcl <<VAULTCFG

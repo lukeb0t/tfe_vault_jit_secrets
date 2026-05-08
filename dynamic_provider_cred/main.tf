@@ -31,11 +31,9 @@ resource "vault_jwt_auth_backend" "tfe" {
   oidc_discovery_url = "https://${var.tfe_hostname}"
   bound_issuer       = "https://${var.tfe_hostname}" # must match the 'iss' claim in TFE JWTs
 
-  # If TFE uses a self-signed or private CA certificate, provide it here.
-  # Retrieve the cert with:
-  #   openssl s_client -connect <tfe_hostname>:443 -showcerts </dev/null 2>/dev/null \
-  #     | openssl x509 -outform PEM
-  # oidc_discovery_ca_pem = file("tfe-ca.pem")
+  # Provide the TFE CA cert so Vault can verify the OIDC discovery endpoint TLS.
+  # Required when TFE uses a self-signed certificate (e.g., self-hosted TFE).
+  oidc_discovery_ca_pem = var.tfe_ca_cert_pem != "" ? var.tfe_ca_cert_pem : null
 }
 
 # ─── Vault Policy ────────────────────────────────────────────────────────────
@@ -93,9 +91,6 @@ resource "vault_jwt_auth_backend_role" "tfe_workspace" {
 
   token_policies = [vault_policy.tfe_workspace.name]
   token_ttl      = var.token_ttl_seconds
-
-  # Must be true — TFE renews the token periodically during long-running applies.
-  token_renewable = true
 }
 
 # ─── Demo KV v2 Mount (optional) ────────────────────────────────────────────
@@ -161,6 +156,16 @@ resource "tfe_variable" "vault_namespace" {
   value        = var.vault_namespace
   category     = "env"
   description  = "Vault namespace (Enterprise)"
+}
+
+resource "tfe_variable" "vault_auth_path" {
+  count = var.configure_tfe_workspace ? 1 : 0
+
+  workspace_id = var.tfe_workspace_id
+  key          = "TFC_VAULT_AUTH_PATH"
+  value        = vault_jwt_auth_backend.tfe.path
+  category     = "env"
+  description  = "Vault JWT auth backend mount path"
 }
 
 resource "tfe_variable" "vault_encoded_cacert" {

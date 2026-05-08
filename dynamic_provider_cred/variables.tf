@@ -42,7 +42,7 @@ variable "tfe_workspace" {
 variable "jwt_backend_path" {
   description = "Mount path for the JWT auth backend in Vault."
   type        = string
-  default     = "jwt"
+  default     = "jwt-vault-provider"
 }
 
 variable "vault_role_name" {
@@ -99,6 +99,12 @@ variable "vault_ca_cert_b64" {
 }
 
 # ─── KV Secrets Mount (optional demo) ─────────────────────────────────────
+
+variable "tfe_ca_cert_pem" {
+  description = "PEM-encoded CA certificate for TFE's self-signed TLS cert. Required when TFE uses a self-signed cert so Vault can verify the OIDC discovery endpoint."
+  type        = string
+  default     = ""
+}
 
 variable "create_demo_kv_mount" {
   description = "When true, create a KV v2 secrets mount at kv/ as a demonstration target for the TFE workspace."

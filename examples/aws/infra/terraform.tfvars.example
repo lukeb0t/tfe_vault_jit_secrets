@@ -1,0 +1,7 @@
+region         = "us-east-1"
+cluster_name   = "jit-demo"
+vault_license  = "02MV4UU..."  # Vault Enterprise license
+tfe_license    = "02MV4UU..."  # TFE Enterprise license
+admin_email    = "admin@example.com"
+admin_password = "Hashi_lab_123!!"
+tfe_org_name   = "hashicorp-demo"

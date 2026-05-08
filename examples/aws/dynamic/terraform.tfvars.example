@@ -1,0 +1,12 @@
+region         = "us-east-1"
+aws_region     = "us-east-1"
+
+# From infra/ outputs:
+vault_addr         = "https://1.2.3.4:8200"
+vault_root_token   = ""  # retrieve: aws ssm get-parameter --name /vault/jit-demo/root_token --with-decryption --query Parameter.Value --output text
+vault_ca_cert_b64  = ""  # retrieve: aws ssm get-parameter --name /vault/jit-demo/tls_cert_b64 --query Parameter.Value --output text
+vault_iam_role_arn = ""  # from infra output: vault_iam_role_arn
+
+tfe_hostname   = "1.2.3.4.nip.io"
+tfe_org_token  = ""  # retrieve: aws ssm get-parameter --name /tfe/jit-demo-tfe/org-token --with-decryption --query Parameter.Value --output text
+tfe_org_name   = "hashicorp-demo"

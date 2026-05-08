@@ -57,7 +57,7 @@ module "dyn_aws" {
 }
 ```
 
-When using alongside `vault_deploy`, pass the IAM role ARN directly from that module's output:
+When using alongside `vault_deploy_aws`, pass the IAM role ARN directly from that module's output:
 
 ```hcl
 module "dyn_aws" {

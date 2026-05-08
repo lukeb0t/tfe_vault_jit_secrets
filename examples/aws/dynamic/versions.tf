@@ -28,11 +28,11 @@ provider "aws" {
 provider "vault" {
   address         = var.vault_addr
   token           = var.vault_root_token
-  skip_tls_verify = true  # self-signed cert from vault_deploy module
+  skip_tls_verify = true  # self-signed cert from vault_deploy_aws module
 }
 
 provider "tfe" {
   hostname        = var.tfe_hostname
   token           = var.tfe_org_token
-  ssl_skip_verify = true  # self-signed cert from tfe_deploy module
+  ssl_skip_verify = true  # self-signed cert from tfe_deploy_aws module
 }
