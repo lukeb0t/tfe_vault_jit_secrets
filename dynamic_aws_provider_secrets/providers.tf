@@ -7,6 +7,10 @@ provider "vault" {
   ca_cert_file = var.vault_ca_cert_file != "" ? var.vault_ca_cert_file : null
 }
 
+provider "aws" {
+  region = var.aws_secrets_backend_region
+}
+
 provider "tfe" {
   hostname = var.tfe_hostname
   token    = var.tfe_token

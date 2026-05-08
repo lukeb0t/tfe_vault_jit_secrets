@@ -129,7 +129,7 @@ resource "aws_kms_alias" "vault" {
 #   1. KMS auto-unseal (kms_unseal policy below)
 #   2. Storing init secrets in SSM (ssm_init policy below)
 #   3. SSM Session Manager access for operator troubleshooting
-# When used with dynamic_vault_secrets, this role also needs sts:AssumeRole
+# When used with dynamic_aws_provider_secrets, this role also needs sts:AssumeRole
 # rights on the target IAM role — managed by that module's trust policy.
 
 resource "aws_iam_role" "vault" {

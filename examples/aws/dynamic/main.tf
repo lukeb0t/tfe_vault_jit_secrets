@@ -11,8 +11,8 @@ resource "tfe_workspace" "demo" {
 # ─── Use Case 1: Dynamic Provider Credentials ───────────────────────────────
 # Configures Vault JWT auth so TFE can authenticate to Vault and use it
 # as a credential provider (e.g., reading KV secrets during plan/apply).
-module "dynamic_provider_cred" {
-  source = "../../../dynamic_provider_cred"
+module "dynamic_vault_secrets" {
+  source = "../../../dynamic_vault_secrets"
 
   vault_addr       = var.vault_addr
   tfe_hostname     = var.tfe_hostname
@@ -32,9 +32,9 @@ module "dynamic_provider_cred" {
 # Configures Vault AWS secrets engine so TFE can obtain short-lived AWS
 # credentials via Vault rather than using static IAM keys.
 # This module creates its own JWT backend at "jwt-aws-provider" by default,
-# independent from dynamic_provider_cred's "jwt-vault-provider" backend.
-module "dynamic_vault_secrets" {
-  source = "../../../dynamic_vault_secrets"
+# independent from dynamic_vault_secrets's "jwt-vault-provider" backend.
+module "dynamic_aws_provider_secrets" {
+  source = "../../../dynamic_aws_provider_secrets"
 
   vault_addr                 = var.vault_addr
   tfe_hostname               = var.tfe_hostname
@@ -55,7 +55,7 @@ module "dynamic_vault_secrets" {
 
 # ─── KV Test Data ─────────────────────────────────────────────────────────────
 resource "vault_kv_secret_v2" "demo_app" {
-  mount               = module.dynamic_provider_cred.kv_mount_path
+  mount               = module.dynamic_vault_secrets.kv_mount_path
   name                = "demo/app"
   delete_all_versions = true
 
@@ -65,11 +65,11 @@ resource "vault_kv_secret_v2" "demo_app" {
     api_key     = "demo-api-key-12345"
   })
 
-  depends_on = [module.dynamic_provider_cred]
+  depends_on = [module.dynamic_vault_secrets]
 }
 
 # ─── Test Workspace 1: vault-kv-test ─────────────────────────────────────────
-# Isolated workspace to verify the dynamic_provider_cred flow end-to-end.
+# Isolated workspace to verify the dynamic_vault_secrets flow end-to-end.
 # TFE authenticates to Vault at jwt-vault-provider, gets a Vault token,
 # and uses it to read a KV secret via the Vault Terraform provider.
 resource "tfe_workspace" "kv_test" {
@@ -96,14 +96,14 @@ resource "tfe_variable" "kv_test_vault_addr" {
 resource "tfe_variable" "kv_test_vault_role" {
   workspace_id = tfe_workspace.kv_test.id
   key          = "TFC_VAULT_RUN_ROLE"
-  value        = module.dynamic_provider_cred.vault_role_name
+  value        = module.dynamic_vault_secrets.vault_role_name
   category     = "env"
 }
 
 resource "tfe_variable" "kv_test_vault_auth_path" {
   workspace_id = tfe_workspace.kv_test.id
   key          = "TFC_VAULT_AUTH_PATH"
-  value        = module.dynamic_provider_cred.jwt_backend_path
+  value        = module.dynamic_vault_secrets.jwt_backend_path
   category     = "env"
 }
 
@@ -117,7 +117,7 @@ resource "tfe_variable" "kv_test_vault_cacert" {
 }
 
 # ─── Test Workspace 2: aws-creds-test ────────────────────────────────────────
-# Isolated workspace to verify the dynamic_vault_secrets flow end-to-end.
+# Isolated workspace to verify the dynamic_aws_provider_secrets flow end-to-end.
 # TFE authenticates to Vault at jwt-aws-provider, gets an STS credential
 # from the Vault AWS secrets engine, and uses it to call AWS APIs.
 resource "tfe_workspace" "aws_test" {
@@ -145,14 +145,14 @@ resource "tfe_variable" "aws_test_vault_addr" {
 resource "tfe_variable" "aws_test_vault_auth_path" {
   workspace_id = tfe_workspace.aws_test.id
   key          = "TFC_VAULT_AUTH_PATH"
-  value        = module.dynamic_vault_secrets.jwt_backend_path
+  value        = module.dynamic_aws_provider_secrets.jwt_backend_path
   category     = "env"
 }
 
 resource "tfe_variable" "aws_test_vault_run_role" {
   workspace_id = tfe_workspace.aws_test.id
   key          = "TFC_VAULT_RUN_ROLE"
-  value        = module.dynamic_vault_secrets.vault_role_name
+  value        = module.dynamic_aws_provider_secrets.vault_role_name
   category     = "env"
 }
 
@@ -183,21 +183,21 @@ resource "tfe_variable" "aws_test_backed_aws_auth_type" {
 resource "tfe_variable" "aws_test_backed_aws_run_vault_role" {
   workspace_id = tfe_workspace.aws_test.id
   key          = "TFC_VAULT_BACKED_AWS_RUN_VAULT_ROLE"
-  value        = module.dynamic_vault_secrets.aws_secrets_role_name
+  value        = module.dynamic_aws_provider_secrets.aws_secrets_role_name
   category     = "env"
 }
 
 resource "tfe_variable" "aws_test_backed_aws_mount" {
   workspace_id = tfe_workspace.aws_test.id
   key          = "TFC_VAULT_BACKED_AWS_MOUNT_PATH"
-  value        = module.dynamic_vault_secrets.aws_secrets_backend_path
+  value        = module.dynamic_aws_provider_secrets.aws_secrets_backend_path
   category     = "env"
 }
 
 resource "tfe_variable" "aws_test_backed_aws_run_role_arn" {
   workspace_id = tfe_workspace.aws_test.id
   key          = "TFC_VAULT_BACKED_AWS_RUN_ROLE_ARN"
-  value        = module.dynamic_vault_secrets.target_iam_role_arn
+  value        = module.dynamic_aws_provider_secrets.target_iam_role_arn
   category     = "env"
 }
 

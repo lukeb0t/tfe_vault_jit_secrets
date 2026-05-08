@@ -6,8 +6,8 @@ This repo implements two HashiCorp validated patterns:
 
 | Pattern | Module | Reference |
 |---------|--------|-----------|
-| TFE workspaces exchange a workload-identity JWT for a short-lived Vault token scoped to a Vault policy | [`dynamic_provider_cred`](./dynamic_provider_cred/) | [Vault-backed dynamic credentials — Vault configuration](https://developer.hashicorp.com/terraform/cloud-docs/dynamic-provider-credentials/vault-configuration) |
-| Vault injects short-lived AWS STS credentials directly into TFE workspace environments | [`dynamic_vault_secrets`](./dynamic_vault_secrets/) | [Terraform Vault-backed dynamic credentials for AWS](https://developer.hashicorp.com/validated-patterns/terraform/terraform-vault-backed-dynamic-credentials-aws) |
+| TFE workspaces exchange a workload-identity JWT for a short-lived Vault token scoped to a Vault policy | [`dynamic_vault_secrets`](./dynamic_vault_secrets/) | [Vault-backed dynamic credentials — Vault configuration](https://developer.hashicorp.com/terraform/cloud-docs/dynamic-provider-credentials/vault-configuration) |
+| Vault injects short-lived AWS STS credentials directly into TFE workspace environments | [`dynamic_aws_provider_secrets`](./dynamic_aws_provider_secrets/) | [Terraform Vault-backed dynamic credentials for AWS](https://developer.hashicorp.com/validated-patterns/terraform/terraform-vault-backed-dynamic-credentials-aws) |
 
 ---
 
@@ -22,8 +22,8 @@ tfe_vault_jit_secrets/
 ├── vault_deploy_azure/     # Vault Enterprise on Azure (VM + VNet + Azure Key Vault)
 │
 │  ── Configure dynamic credential flows ──
-├── dynamic_provider_cred/  # TFE → jwt-vault-provider → Vault token → Vault provider
-├── dynamic_vault_secrets/  # TFE → jwt-aws-provider   → Vault token → AWS STS creds
+├── dynamic_vault_secrets/  # TFE → jwt-vault-provider → Vault token → Vault provider
+├── dynamic_aws_provider_secrets/  # TFE → jwt-aws-provider   → Vault token → AWS STS creds
 │
 └── examples/
     ├── aws/
@@ -197,7 +197,7 @@ Key outputs: `vault_addr`, `vault_public_ip`, `key_vault_name`, `key_vault_uri`
 
 ---
 
-### [`dynamic_provider_cred`](./dynamic_provider_cred/) — Use Case A: TFE Vault Provider Credentials
+### [`dynamic_vault_secrets`](./dynamic_vault_secrets/) — Use Case A: TFE Vault Provider Credentials
 
 Configures Vault JWT auth to trust TFE workload identity tokens. Workspaces receive a short-lived Vault token without managing any static credential.
 
@@ -207,7 +207,7 @@ Configures Vault JWT auth to trust TFE workload identity tokens. Workspaces rece
 
 ---
 
-### [`dynamic_vault_secrets`](./dynamic_vault_secrets/) — Use Case B: TFE Vault-Backed AWS Credentials
+### [`dynamic_aws_provider_secrets`](./dynamic_aws_provider_secrets/) — Use Case B: TFE Vault-Backed AWS Credentials
 
 Extends Use Case A: Vault exchanges the TFE JWT for short-lived AWS STS credentials via the Vault AWS secrets engine. Eliminates all static AWS credentials from TFE.
 
@@ -268,7 +268,7 @@ terraform init && terraform apply
 
 This configuration creates the `vault-kv-test` and `aws-creds-test` workspaces, uploads their test configs with a temporary TFE team token, and leaves runs unqueued. Trigger the runs manually from the TFE UI.
 
-If Vault is deployed on Azure, the two dynamic modules are still cloud-agnostic — consume `dynamic_provider_cred` and `dynamic_vault_secrets` from your own root module once you have `vault_addr`, a Vault bootstrap token, and your TFE connection details.
+If Vault is deployed on Azure, the two dynamic modules are still cloud-agnostic — consume `dynamic_vault_secrets` and `dynamic_aws_provider_secrets` from your own root module once you have `vault_addr`, a Vault bootstrap token, and your TFE connection details.
 
 ---
 

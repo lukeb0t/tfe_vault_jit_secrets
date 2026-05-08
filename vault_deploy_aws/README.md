@@ -95,7 +95,7 @@ The principal running Terraform needs:
 | `vault_public_ip` | Elastic IP address assigned to the Vault server. |
 | `instance_id` | EC2 instance ID. |
 | `security_group_id` | Security group ID. |
-| `iam_role_arn` | ARN of the IAM role attached to the EC2 instance. Pass this to `dynamic_vault_secrets` as `vault_iam_user_arn`. |
+| `iam_role_arn` | ARN of the IAM role attached to the EC2 instance. Pass this to `dynamic_aws_provider_secrets` as `vault_iam_user_arn`. |
 | `kms_key_id` | KMS key ID used for auto-unseal. |
 | `kms_key_arn` | KMS key ARN used for auto-unseal. |
 | `ssm_prefix` | SSM Parameter Store path prefix (`/vault/<cluster_name>`). |

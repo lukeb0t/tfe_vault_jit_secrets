@@ -10,11 +10,11 @@ output "tfe_workspace_url" {
 
 output "dynamic_provider_env_vars" {
   description = "Environment variables to set manually on TFE workspace for dynamic provider credentials."
-  value       = module.dynamic_provider_cred.tfe_workspace_env_vars
+  value       = module.dynamic_vault_secrets.tfe_workspace_env_vars
 }
 
-output "dynamic_vault_secrets_env_vars" {
+output "dynamic_aws_provider_secrets_env_vars" {
   description = "Environment variables to set manually on TFE workspace for vault-backed AWS secrets."
-  value       = module.dynamic_vault_secrets.tfe_workspace_env_vars
+  value       = module.dynamic_aws_provider_secrets.tfe_workspace_env_vars
   sensitive   = true
 }
