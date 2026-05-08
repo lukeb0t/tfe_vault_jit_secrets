@@ -115,7 +115,7 @@ module "dyn_aws" {
 | terraform | >= 1.5.0 |
 | hashicorp/aws | ~> 5.0 |
 | hashicorp/vault | ~> 4.0 |
-| hashicorp/tfe | ~> 0.57 (optional — only when `configure_tfe_workspace = true`) |
+| hashicorp/tfe | ~> 0.57 |
 
 ### AWS permissions required by the caller
 

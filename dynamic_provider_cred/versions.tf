@@ -6,10 +6,9 @@ terraform {
       source  = "hashicorp/vault"
       version = "~> 4.0"
     }
-    # Uncomment when ready to configure TFE workspace variables
-    # tfe = {
-    #   source  = "hashicorp/tfe"
-    #   version = "~> 0.57"
-    # }
+    tfe = {
+      source  = "hashicorp/tfe"
+      version = "~> 0.57"
+    }
   }
 }

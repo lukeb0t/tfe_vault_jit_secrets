@@ -5,6 +5,18 @@ variable "vault_addr" {
   type        = string
 }
 
+variable "vault_token" {
+  description = "Vault token used to authenticate the Vault provider. Bootstrap with a root token; rotate to a scoped token for ongoing use."
+  type        = string
+  sensitive   = true
+}
+
+variable "vault_ca_cert_file" {
+  description = "Path to a PEM-encoded CA certificate file for Vault TLS verification. Leave empty to use system CAs or set VAULT_CACERT instead."
+  type        = string
+  default     = ""
+}
+
 variable "vault_namespace" {
   description = "Vault namespace. Leave empty for root namespace."
   type        = string
@@ -16,6 +28,13 @@ variable "vault_namespace" {
 variable "tfe_hostname" {
   description = "Hostname of the self-hosted Terraform Enterprise instance."
   type        = string
+}
+
+variable "tfe_token" {
+  description = "TFE API token with permission to manage workspace variables. Required when configure_tfe_workspace = true."
+  type        = string
+  sensitive   = true
+  default     = ""
 }
 
 variable "tfe_organization" {

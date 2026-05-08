@@ -91,7 +91,7 @@ module "dyn_provider" {
 |------|---------|
 | terraform | >= 1.5.0 |
 | hashicorp/vault | ~> 4.0 |
-| hashicorp/tfe | ~> 0.57 (optional — only when `configure_tfe_workspace = true`) |
+| hashicorp/tfe | ~> 0.57 |
 
 ## Inputs
 

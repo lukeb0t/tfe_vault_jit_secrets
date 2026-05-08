@@ -1,0 +1,18 @@
+provider "vault" {
+  address = var.vault_addr
+  token   = var.vault_token
+
+  # Required when Vault uses a self-signed certificate.
+  # Set VAULT_CACERT or VAULT_SKIP_VERIFY as an alternative.
+  ca_cert_file = var.vault_ca_cert_file != "" ? var.vault_ca_cert_file : null
+}
+
+provider "aws" {
+  region = var.aws_secrets_backend_region
+}
+
+# Required when configure_tfe_workspace = true.
+provider "tfe" {
+  hostname = var.tfe_hostname
+  token    = var.tfe_token
+}
