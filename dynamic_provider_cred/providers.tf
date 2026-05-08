@@ -7,7 +7,6 @@ provider "vault" {
   ca_cert_file = var.vault_ca_cert_file != "" ? var.vault_ca_cert_file : null
 }
 
-# Required when configure_tfe_workspace = true.
 provider "tfe" {
   hostname = var.tfe_hostname
   token    = var.tfe_token

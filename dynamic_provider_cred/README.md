@@ -62,12 +62,11 @@ secret_paths = [
 
 ### With automatic TFE workspace variable injection
 
-Set `configure_tfe_workspace = true` to have Terraform inject the required `TFC_VAULT_*` environment variables into the workspace automatically. Requires a TFE token with workspace-write permissions.
+Terraform injects the required `TFC_VAULT_*` environment variables into the workspace on every apply. Supply the workspace ID and a TFE token with workspace-write permissions:
 
 ```hcl
-configure_tfe_workspace = true
-tfe_workspace_id        = "ws-XXXXXXXXXXXXXXXX"
-tfe_token               = "TOKEN"   # org token or team token with manage_workspaces
+tfe_workspace_id = "ws-XXXXXXXXXXXXXXXX"
+tfe_token        = "TOKEN"   # org token or team token with manage_workspaces
 ```
 
 See [TFE workspace environment variables](#tfe-workspace-environment-variables) for the manual equivalent.
@@ -103,9 +102,8 @@ When calling this module from another root module (rather than running it standa
 | `token_ttl_seconds` | Lifetime of Vault tokens issued to TFE. TFE renews periodically during long runs. | `number` | `1200` | |
 | `secret_paths` | Vault paths the policy grants `read` access to. | `list(string)` | `["kv/data/*"]` | |
 | `create_demo_kv_mount` | Create a KV v2 mount at `kv/` as a demonstration target. | `bool` | `true` | |
-| `configure_tfe_workspace` | Automatically create `tfe_variable` resources in the target workspace. | `bool` | `false` | |
-| `tfe_workspace_id` | TFE workspace ID (e.g. `ws-XXXXXXXXXXXXXXXX`). Required when `configure_tfe_workspace = true`. | `string` | `""` | |
-| `tfe_token` | TFE API token with permission to manage workspace variables. Required when `configure_tfe_workspace = true`. | `string` (sensitive) | `""` | |
+| `tfe_workspace_id` | TFE workspace ID (e.g. `ws-XXXXXXXXXXXXXXXX`). | `string` | — | ✅ |
+| `tfe_token` | TFE API token with permission to manage workspace variables. | `string` (sensitive) | — | ✅ |
 | `vault_ca_cert_b64` | Base64-encoded PEM CA certificate for Vault. Injected as `TFC_VAULT_ENCODED_CACERT`. Required for self-signed TLS. | `string` (sensitive) | `""` | |
 
 ## Outputs
@@ -121,7 +119,7 @@ When calling this module from another root module (rather than running it standa
 
 ## TFE workspace environment variables
 
-When `configure_tfe_workspace = false` (the default), set these variables manually in the TFE workspace:
+For manual setup (without running this module), set these variables directly in the TFE workspace:
 
 | Variable | Value | Notes |
 |----------|-------|-------|

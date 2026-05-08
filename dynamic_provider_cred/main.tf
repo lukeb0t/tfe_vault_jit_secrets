@@ -106,22 +106,18 @@ resource "vault_mount" "kv" {
 }
 
 # ─── TFE Workspace Variables ──────────────────────────────────────────────────
-# Uncomment the tfe provider in versions.tf and set configure_tfe_workspace = true
-# to have Terraform inject the required environment variables automatically.
+# Injects the required TFC_VAULT_* environment variables into the target
+# TFE workspace so any run can exchange its workload-identity JWT for a
+# Vault token via the jwt-vault-provider backend.
 #
-# Required env vars written to the TFE workspace:
-#   TFC_VAULT_PROVIDER_AUTH = "true"
-#   TFC_VAULT_ADDR          = <vault_addr>
-#   TFC_VAULT_AUTH_PATH     = <jwt backend path, default: jwt-vault-provider>
-#   TFC_VAULT_RUN_ROLE      = <vault_role_name>
-#
-# Optional:
-#   TFC_VAULT_NAMESPACE     = <vault namespace>
-#   TFC_VAULT_ENCODED_CACERT = <base64 PEM cert>  # required for self-signed Vault TLS
+#   TFC_VAULT_PROVIDER_AUTH  = "true"
+#   TFC_VAULT_ADDR           = <vault_addr>
+#   TFC_VAULT_AUTH_PATH      = <jwt_backend_path>  (default: jwt-vault-provider)
+#   TFC_VAULT_RUN_ROLE       = <vault_role_name>
+#   TFC_VAULT_NAMESPACE      = <vault_namespace>   (omitted for root namespace)
+#   TFC_VAULT_ENCODED_CACERT = <base64 PEM>        (omitted when not provided)
 
 resource "tfe_variable" "vault_provider_auth" {
-  count = var.configure_tfe_workspace ? 1 : 0
-
   workspace_id = var.tfe_workspace_id
   key          = "TFC_VAULT_PROVIDER_AUTH"
   value        = "true"
@@ -130,8 +126,6 @@ resource "tfe_variable" "vault_provider_auth" {
 }
 
 resource "tfe_variable" "vault_addr" {
-  count = var.configure_tfe_workspace ? 1 : 0
-
   workspace_id = var.tfe_workspace_id
   key          = "TFC_VAULT_ADDR"
   value        = var.vault_addr
@@ -140,8 +134,6 @@ resource "tfe_variable" "vault_addr" {
 }
 
 resource "tfe_variable" "vault_run_role" {
-  count = var.configure_tfe_workspace ? 1 : 0
-
   workspace_id = var.tfe_workspace_id
   key          = "TFC_VAULT_RUN_ROLE"
   value        = vault_jwt_auth_backend_role.tfe_workspace.role_name
@@ -150,8 +142,8 @@ resource "tfe_variable" "vault_run_role" {
 }
 
 resource "tfe_variable" "vault_namespace" {
-  # Only inject namespace if one is set — root namespace needs no variable.
-  count = var.configure_tfe_workspace && var.vault_namespace != "" ? 1 : 0
+  # Only inject namespace when one is set — root namespace needs no variable.
+  count = var.vault_namespace != "" ? 1 : 0
 
   workspace_id = var.tfe_workspace_id
   key          = "TFC_VAULT_NAMESPACE"
@@ -161,8 +153,6 @@ resource "tfe_variable" "vault_namespace" {
 }
 
 resource "tfe_variable" "vault_auth_path" {
-  count = var.configure_tfe_workspace ? 1 : 0
-
   workspace_id = var.tfe_workspace_id
   key          = "TFC_VAULT_AUTH_PATH"
   value        = vault_jwt_auth_backend.tfe.path
@@ -172,12 +162,12 @@ resource "tfe_variable" "vault_auth_path" {
 
 resource "tfe_variable" "vault_encoded_cacert" {
   # Only inject the CA cert when one is provided — omit for public CA-signed certs.
-  count = var.configure_tfe_workspace && var.vault_ca_cert_b64 != "" ? 1 : 0
+  count = var.vault_ca_cert_b64 != "" ? 1 : 0
 
   workspace_id = var.tfe_workspace_id
   key          = "TFC_VAULT_ENCODED_CACERT"
   value        = var.vault_ca_cert_b64
   category     = "env"
-  sensitive    = true # prevents the cert from appearing in TFE UI
+  sensitive    = true
   description  = "Base64-encoded Vault CA cert — required for self-signed TLS"
 }

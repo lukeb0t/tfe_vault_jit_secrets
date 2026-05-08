@@ -24,11 +24,10 @@ secret_paths = ["kv/data/*"]
 create_demo_kv_mount = true
 
 # ── TFE workspace variable injection ──────────────────────────────────────
-# Set configure_tfe_workspace = true to have Terraform inject the required
-# TFC_VAULT_* environment variables into the workspace automatically.
-configure_tfe_workspace = false
-tfe_workspace_id        = "" # e.g. "ws-XXXXXXXXXXXXXXXX"
-tfe_token               = "" # TFE org or team token — required when configure_tfe_workspace = true
+# Terraform will inject the required TFC_VAULT_* environment variables into
+# this workspace automatically.
+tfe_workspace_id = "" # e.g. "ws-XXXXXXXXXXXXXXXX"
+tfe_token        = "" # TFE org or team token with workspace-write permissions
 
 # base64 of the Vault self-signed CA cert
 # vault_ca_cert_b64 = "LS0tLS1CRUdJTi..."

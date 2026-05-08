@@ -198,13 +198,11 @@ resource "aws_iam_role_policy" "vault_target" {
 # Vault-backed AWS credential injection requires both the generic Vault auth
 # vars and the AWS-specific vars below.
 # If set_vault_auth_vars = false, another process must write the generic vars
-# using this module's auth path and run role (for example jwt-aws-provider and
+# using this module's auth path and run role (jwt-aws-provider /
 # tfe-vault-backed-aws) — do not reuse dynamic_provider_cred's auth path/role.
-#
-# Un-comment the tfe provider in versions.tf and set configure_tfe_workspace = true.
 
 resource "tfe_variable" "vault_provider_auth" {
-  count = var.configure_tfe_workspace && var.set_vault_auth_vars ? 1 : 0
+  count = var.set_vault_auth_vars ? 1 : 0
 
   workspace_id = var.tfe_workspace_id
   key          = "TFC_VAULT_PROVIDER_AUTH"
@@ -214,7 +212,7 @@ resource "tfe_variable" "vault_provider_auth" {
 }
 
 resource "tfe_variable" "vault_addr" {
-  count = var.configure_tfe_workspace && var.set_vault_auth_vars ? 1 : 0
+  count = var.set_vault_auth_vars ? 1 : 0
 
   workspace_id = var.tfe_workspace_id
   key          = "TFC_VAULT_ADDR"
@@ -224,7 +222,7 @@ resource "tfe_variable" "vault_addr" {
 }
 
 resource "tfe_variable" "vault_run_role" {
-  count = var.configure_tfe_workspace && var.set_vault_auth_vars ? 1 : 0
+  count = var.set_vault_auth_vars ? 1 : 0
 
   workspace_id = var.tfe_workspace_id
   key          = "TFC_VAULT_RUN_ROLE"
@@ -234,7 +232,7 @@ resource "tfe_variable" "vault_run_role" {
 }
 
 resource "tfe_variable" "vault_auth_path" {
-  count = var.configure_tfe_workspace && var.set_vault_auth_vars ? 1 : 0
+  count = var.set_vault_auth_vars ? 1 : 0
 
   workspace_id = var.tfe_workspace_id
   key          = "TFC_VAULT_AUTH_PATH"
@@ -245,8 +243,6 @@ resource "tfe_variable" "vault_auth_path" {
 
 # Tells TFE to inject vault-backed AWS credentials into the workspace environment.
 resource "tfe_variable" "vault_backed_aws_auth" {
-  count = var.configure_tfe_workspace ? 1 : 0
-
   workspace_id = var.tfe_workspace_id
   key          = "TFC_VAULT_BACKED_AWS_AUTH"
   value        = "true"
@@ -257,8 +253,6 @@ resource "tfe_variable" "vault_backed_aws_auth" {
 # The Vault AWS secrets engine role name — Vault uses this to look up which
 # IAM role to assume when generating credentials.
 resource "tfe_variable" "vault_backed_aws_run_vault_role" {
-  count = var.configure_tfe_workspace ? 1 : 0
-
   workspace_id = var.tfe_workspace_id
   key          = "TFC_VAULT_BACKED_AWS_RUN_VAULT_ROLE"
   value        = vault_aws_secret_backend_role.tfe.name
@@ -268,8 +262,6 @@ resource "tfe_variable" "vault_backed_aws_run_vault_role" {
 
 # IAM role ARN that Vault assumes (via STS) when credential_type = assumed_role.
 resource "tfe_variable" "vault_backed_aws_run_role_arn" {
-  count = var.configure_tfe_workspace ? 1 : 0
-
   workspace_id = var.tfe_workspace_id
   key          = "TFC_VAULT_BACKED_AWS_RUN_ROLE_ARN"
   value        = aws_iam_role.vault_target.arn
@@ -278,8 +270,6 @@ resource "tfe_variable" "vault_backed_aws_run_role_arn" {
 }
 
 resource "tfe_variable" "vault_backed_aws_mount" {
-  count = var.configure_tfe_workspace ? 1 : 0
-
   workspace_id = var.tfe_workspace_id
   key          = "TFC_VAULT_BACKED_AWS_MOUNT_PATH"
   value        = vault_aws_secret_backend.aws.path
@@ -289,8 +279,6 @@ resource "tfe_variable" "vault_backed_aws_mount" {
 
 # Must match the credential_type set on vault_aws_secret_backend_role above.
 resource "tfe_variable" "vault_backed_aws_auth_type" {
-  count = var.configure_tfe_workspace ? 1 : 0
-
   workspace_id = var.tfe_workspace_id
   key          = "TFC_VAULT_BACKED_AWS_AUTH_TYPE"
   value        = "assumed_role"
@@ -300,12 +288,12 @@ resource "tfe_variable" "vault_backed_aws_auth_type" {
 
 resource "tfe_variable" "vault_encoded_cacert" {
   # Only inject when a CA cert is provided and not delegated to dynamic_provider_cred.
-  count = var.configure_tfe_workspace && var.set_vault_auth_vars && var.vault_ca_cert_b64 != "" ? 1 : 0
+  count = var.set_vault_auth_vars && var.vault_ca_cert_b64 != "" ? 1 : 0
 
   workspace_id = var.tfe_workspace_id
   key          = "TFC_VAULT_ENCODED_CACERT"
   value        = var.vault_ca_cert_b64
   category     = "env"
-  sensitive    = true # prevents cert from appearing in TFE UI
+  sensitive    = true
   description  = "Base64-encoded Vault CA cert (self-signed TLS)"
 }

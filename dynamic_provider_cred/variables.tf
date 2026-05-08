@@ -33,7 +33,7 @@ variable "tfe_hostname" {
 }
 
 variable "tfe_token" {
-  description = "TFE API token with permission to manage workspace variables. Required when configure_tfe_workspace = true."
+  description = "TFE API token with permission to manage workspace variables. Required when setting up workspace variable injection."
   type        = string
   sensitive   = true
   default     = ""
@@ -95,19 +95,10 @@ variable "secret_paths" {
 }
 
 # ─── TFE Workspace Variable Injection ──────────────────────────────────────
-# Requires the 'tfe' provider. Set configure_tfe_workspace = true and
-# un-comment the tfe provider in versions.tf to enable.
-
-variable "configure_tfe_workspace" {
-  description = "When true, create tfe_variable resources to inject dynamic credential environment variables into the target TFE workspace."
-  type        = bool
-  default     = false
-}
 
 variable "tfe_workspace_id" {
-  description = "TFE workspace ID to inject environment variables into. Required when configure_tfe_workspace = true."
+  description = "TFE workspace ID to inject environment variables into (e.g. 'ws-XXXXXXXXXXXXXXXX')."
   type        = string
-  default     = ""
 }
 
 variable "vault_ca_cert_b64" {

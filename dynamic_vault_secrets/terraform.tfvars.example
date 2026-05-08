@@ -42,7 +42,6 @@ vault_iam_user_arn = "arn:aws:iam::123456789012:user/vault"
 #   }
 # EOT
 
-configure_tfe_workspace = false
-tfe_workspace_id        = ""
-tfe_token               = "" # TFE org or team token — required when configure_tfe_workspace = true
+tfe_workspace_id = "" # e.g. "ws-XXXXXXXXXXXXXXXX"
+tfe_token        = "" # TFE org or team token with workspace-write permissions
 # vault_ca_cert_b64     = "LS0tLS1CRUdJTi..."

@@ -11,7 +11,6 @@ provider "aws" {
   region = var.aws_secrets_backend_region
 }
 
-# Required when configure_tfe_workspace = true.
 provider "tfe" {
   hostname = var.tfe_hostname
   token    = var.tfe_token

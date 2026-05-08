@@ -75,13 +75,12 @@ target_iam_policy_json = jsonencode({
 
 ### With automatic TFE workspace variable injection
 
-Set `configure_tfe_workspace = true` to have Terraform inject the required `TFC_VAULT_*` and `TFC_VAULT_BACKED_AWS_*` environment variables into the workspace automatically. Requires a TFE token with workspace-write permissions.
+Terraform injects the required `TFC_VAULT_*` and `TFC_VAULT_BACKED_AWS_*` environment variables into the workspace on every apply. Supply the workspace ID and a TFE token with workspace-write permissions:
 
 ```hcl
-configure_tfe_workspace = true
-tfe_workspace_id        = "ws-XXXXXXXXXXXXXXXX"
-tfe_token               = "TOKEN"   # org token or team token with manage_workspaces
-vault_ca_cert_b64       = base64encode(file("vault-ca.pem"))
+tfe_workspace_id = "ws-XXXXXXXXXXXXXXXX"
+tfe_token        = "TOKEN"   # org token or team token with manage_workspaces
+vault_ca_cert_b64 = base64encode(file("vault-ca.pem"))
 ```
 
 See [TFE workspace environment variables](#tfe-workspace-environment-variables) for the manual equivalent.
@@ -146,10 +145,9 @@ This is handled automatically by the trust policy set on `aws_iam_role.vault_tar
 | `max_sts_ttl_seconds` | Maximum TTL for generated STS credentials. | `number` | `43200` | |
 | `target_iam_role_name` | Name of the AWS IAM role Vault assumes to generate credentials. | `string` | `"vault-dynamic-creds-target"` | |
 | `target_iam_policy_json` | IAM policy JSON for the target role. Defaults to a read-only EC2/S3 demo policy. | `string` | `""` | |
-| `configure_tfe_workspace` | Create `tfe_variable` resources injecting the workspace env vars for this flow. | `bool` | `false` | |
-| `tfe_workspace_id` | TFE workspace ID. Required when `configure_tfe_workspace = true`. | `string` | `""` | |
-| `tfe_token` | TFE API token with permission to manage workspace variables. Required when `configure_tfe_workspace = true`. | `string` (sensitive) | `""` | |
-| `vault_ca_cert_b64` | Base64-encoded PEM CA cert for self-signed Vault TLS. | `string` (sensitive) | `""` | |
+| `tfe_workspace_id` | TFE workspace ID (e.g. `ws-XXXXXXXXXXXXXXXX`). | `string` | — | ✅ |
+| `tfe_token` | TFE API token with permission to manage workspace variables. | `string` (sensitive) | — | ✅ |
+| `vault_ca_cert_b64` | Base64-encoded PEM CA cert for Vault. Injected as `TFC_VAULT_ENCODED_CACERT`. Required for self-signed TLS. | `string` (sensitive) | `""` | |
 | `set_vault_auth_vars` | When `true`, also inject the generic Vault auth vars (`TFC_VAULT_PROVIDER_AUTH`, `TFC_VAULT_ADDR`, `TFC_VAULT_AUTH_PATH`, `TFC_VAULT_RUN_ROLE`). Set `false` only if another process writes those same values for this AWS flow. | `bool` | `true` | |
 | `create_jwt_backend` | When `true`, create the JWT auth backend at `jwt_backend_path`. Set `false` only to reuse an existing backend at that exact path. | `bool` | `true` | |
 | `tfe_ca_cert_pem` | PEM-encoded CA cert for TFE's self-signed TLS certificate. Needed so Vault can verify TFE's OIDC discovery endpoint when `create_jwt_backend = true`. | `string` | `""` | |
@@ -168,7 +166,7 @@ This is handled automatically by the trust policy set on `aws_iam_role.vault_tar
 
 ## TFE workspace environment variables
 
-When `configure_tfe_workspace = false` (the default), set these in the TFE workspace manually:
+For manual setup, set these in the TFE workspace instead:
 
 | Variable | Value | Notes |
 |----------|-------|-------|
