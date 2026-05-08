@@ -199,3 +199,119 @@ resource "tfe_variable" "aws_test_backed_aws_run_role_arn" {
   value        = module.dynamic_vault_secrets.target_iam_role_arn
   category     = "env"
 }
+
+# ─── Test Config Upload ───────────────────────────────────────────────────────
+# Packages each test directory and pushes it to the corresponding TFE workspace
+# as a configuration version. Runs are triggered manually via the TFE UI.
+# Re-uploads automatically when the config files change (hash-based trigger).
+#
+# Uses a short-lived owners team token (created inline) because the org token
+# lacks workspace write access required to POST configuration versions.
+
+locals {
+  test_dir = "${path.module}/test"
+}
+
+resource "tfe_team" "config_upload" {
+  name         = "test-config-upload"
+  organization = var.tfe_org_name
+
+  organization_access {
+    manage_workspaces = true
+  }
+}
+
+resource "tfe_team_token" "upload" {
+  team_id = tfe_team.config_upload.id
+}
+
+resource "null_resource" "upload_kv_test_config" {
+  triggers = {
+    config_hash = filesha256("${local.test_dir}/vault-kv-test/main.tf")
+    workspace   = tfe_workspace.kv_test.id
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOF
+      set -e
+      WORK=$(mktemp -d)
+      cp "${local.test_dir}/vault-kv-test/main.tf" "$WORK/"
+      tar -czf "$WORK/config.tar.gz" -C "$WORK" main.tf
+
+      CV=$(curl -sf -k \
+        -H "Authorization: Bearer ${tfe_team_token.upload.token}" \
+        -H "Content-Type: application/vnd.api+json" \
+        "https://${var.tfe_hostname}/api/v2/workspaces/${tfe_workspace.kv_test.id}/configuration-versions" \
+        -d '{"data":{"type":"configuration-versions","attributes":{"auto-queue-runs":false}}}')
+
+      UPLOAD_URL=$(echo "$CV" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['attributes']['upload-url'])")
+
+      curl -sf -k \
+        -X PUT \
+        -H "Content-Type: application/octet-stream" \
+        --data-binary @"$WORK/config.tar.gz" \
+        "$UPLOAD_URL"
+
+      rm -rf "$WORK"
+      echo "vault-kv-test config uploaded"
+    EOF
+    interpreter = ["bash", "-c"]
+  }
+
+  depends_on = [
+    tfe_workspace.kv_test,
+    tfe_variable.kv_test_vault_auth,
+    tfe_variable.kv_test_vault_addr,
+    tfe_variable.kv_test_vault_role,
+    tfe_variable.kv_test_vault_auth_path,
+    tfe_variable.kv_test_vault_cacert,
+  ]
+}
+
+resource "null_resource" "upload_aws_test_config" {
+  triggers = {
+    config_hash = filesha256("${local.test_dir}/aws-creds-test/main.tf")
+    workspace   = tfe_workspace.aws_test.id
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOF
+      set -e
+      WORK=$(mktemp -d)
+      cp "${local.test_dir}/aws-creds-test/main.tf" "$WORK/"
+      tar -czf "$WORK/config.tar.gz" -C "$WORK" main.tf
+
+      CV=$(curl -sf -k \
+        -H "Authorization: Bearer ${tfe_team_token.upload.token}" \
+        -H "Content-Type: application/vnd.api+json" \
+        "https://${var.tfe_hostname}/api/v2/workspaces/${tfe_workspace.aws_test.id}/configuration-versions" \
+        -d '{"data":{"type":"configuration-versions","attributes":{"auto-queue-runs":false}}}')
+
+      UPLOAD_URL=$(echo "$CV" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['attributes']['upload-url'])")
+
+      curl -sf -k \
+        -X PUT \
+        -H "Content-Type: application/octet-stream" \
+        --data-binary @"$WORK/config.tar.gz" \
+        "$UPLOAD_URL"
+
+      rm -rf "$WORK"
+      echo "aws-creds-test config uploaded"
+    EOF
+    interpreter = ["bash", "-c"]
+  }
+
+  depends_on = [
+    tfe_workspace.aws_test,
+    tfe_variable.aws_test_vault_provider_auth,
+    tfe_variable.aws_test_vault_addr,
+    tfe_variable.aws_test_vault_auth_path,
+    tfe_variable.aws_test_vault_run_role,
+    tfe_variable.aws_test_vault_cacert,
+    tfe_variable.aws_test_backed_aws_auth,
+    tfe_variable.aws_test_backed_aws_auth_type,
+    tfe_variable.aws_test_backed_aws_run_vault_role,
+    tfe_variable.aws_test_backed_aws_mount,
+    tfe_variable.aws_test_backed_aws_run_role_arn,
+  ]
+}
