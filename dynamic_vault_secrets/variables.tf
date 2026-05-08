@@ -148,14 +148,14 @@ variable "tfe_workspace_id" {
 }
 
 variable "vault_ca_cert_b64" {
-  description = "Base64-encoded PEM CA certificate for Vault. Injected as TFC_VAULT_ENCODED_CACERT when non-empty."
+  description = "Base64-encoded PEM CA certificate for Vault. Injected as TFC_VAULT_ENCODED_CACERT when non-empty for self-signed Vault TLS."
   type        = string
   sensitive   = true
   default     = ""
 }
 
 variable "set_vault_auth_vars" {
-  description = "When true, sets the generic Vault auth workspace vars (TFC_VAULT_PROVIDER_AUTH, TFC_VAULT_ADDR, TFC_VAULT_RUN_ROLE, TFC_VAULT_ENCODED_CACERT). Set to false when using dynamic_provider_cred alongside this module to avoid duplicate workspace variable errors."
+  description = "When true, sets the generic Vault auth workspace vars for this flow (TFC_VAULT_PROVIDER_AUTH, TFC_VAULT_ADDR, TFC_VAULT_AUTH_PATH, TFC_VAULT_RUN_ROLE, and TFC_VAULT_ENCODED_CACERT when provided). Set to false only if another process writes the same values for this module's jwt_backend_path and vault_role_name."
   type        = bool
   default     = true
 }

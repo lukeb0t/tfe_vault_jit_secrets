@@ -77,7 +77,7 @@ vault status
 | `vault_license` | Vault Enterprise license string | `string` | — | yes |
 | `location` | Azure region (e.g. `"East US"`, `"West Europe"`) | `string` | — | yes |
 | `resource_group_name` | Existing Resource Group to deploy into | `string` | — | yes |
-| `admin_ssh_public_key` | SSH public key string for `azureuser` | `string` | — | yes |
+| `admin_ssh_public_key` | SSH public key for `azureuser` (required by Azure even when SSH stays closed) | `string` | — | yes |
 | `vnet_id` | Existing VNet resource ID (`null` = module creates VNet) | `string` | `null` | no |
 | `subnet_id` | Existing subnet resource ID (required when `vnet_id` is set) | `string` | `null` | no |
 | `vnet_cidr` | Address space for module-managed VNet | `string` | `"10.100.0.0/16"` | no |
@@ -85,7 +85,6 @@ vault status
 | `vault_ingress_cidr_blocks` | CIDRs allowed inbound on port 8200 | `list(string)` | `["0.0.0.0/0"]` | no |
 | `ssh_ingress_cidr_blocks` | CIDRs allowed inbound on port 22 (empty = no SSH rule) | `list(string)` | `[]` | no |
 | `vm_size` | Azure VM size | `string` | `"Standard_D2s_v3"` | no |
-| `admin_ssh_public_key` | SSH public key for `azureuser` (required by Azure) | `string` | — | yes |
 | `os_disk_size_gb` | OS disk size in GiB (Raft storage shares this disk) | `number` | `50` | no |
 | `key_vault_name` | Override Key Vault name (≤ 24 chars, globally unique; `null` = auto-derived) | `string` | `null` | no |
 | `soft_delete_retention_days` | Soft-delete retention in days (7–90) | `number` | `7` | no |

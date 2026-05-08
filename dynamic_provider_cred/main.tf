@@ -1,10 +1,10 @@
 # =============================================================================
 # dynamic_provider_cred
 #
-# Configures Vault to act as an OIDC identity provider trusted by a
-# self-hosted Terraform Enterprise (TFE) instance, enabling TFE workspaces
-# to authenticate to Vault using workload identity (JWT) tokens and receive
-# a short-lived Vault token for use with the Vault Terraform provider.
+# Configures Vault JWT auth to trust workload identity (JWT) tokens issued by a
+# self-hosted Terraform Enterprise (TFE) instance, enabling TFE workspaces to
+# exchange their run token for a short-lived Vault token that the Vault
+# Terraform provider can use during plan/apply.
 #
 # Reference:
 #   https://developer.hashicorp.com/terraform/cloud-docs/dynamic-provider-credentials/vault-configuration
@@ -17,7 +17,7 @@
 # =============================================================================
 
 # ─── JWT Auth Backend ────────────────────────────────────────────────────────
-# Vault trusts TFE as an OIDC identity provider by pointing at TFE's
+# Vault trusts TFE's workload identity issuer by pointing at TFE's
 # OIDC discovery endpoint (https://<tfe_hostname>/.well-known/openid-configuration).
 # Vault fetches the JWKS from this URL to verify incoming JWT signatures.
 
@@ -110,12 +110,14 @@ resource "vault_mount" "kv" {
 # to have Terraform inject the required environment variables automatically.
 #
 # Required env vars written to the TFE workspace:
-#   TFC_VAULT_PROVIDER_AUTH        = "true"
-#   TFC_VAULT_ADDR                 = <vault_addr>
-#   TFC_VAULT_RUN_ROLE             = <vault_role_name>
+#   TFC_VAULT_PROVIDER_AUTH = "true"
+#   TFC_VAULT_ADDR          = <vault_addr>
+#   TFC_VAULT_AUTH_PATH     = <jwt backend path, default: jwt-vault-provider>
+#   TFC_VAULT_RUN_ROLE      = <vault_role_name>
 #
-# Optional but required for self-signed Vault TLS:
-#   TFC_VAULT_ENCODED_CACERT       = <base64 PEM cert>
+# Optional:
+#   TFC_VAULT_NAMESPACE     = <vault namespace>
+#   TFC_VAULT_ENCODED_CACERT = <base64 PEM cert>  # required for self-signed Vault TLS
 
 resource "tfe_variable" "vault_provider_auth" {
   count = var.configure_tfe_workspace ? 1 : 0

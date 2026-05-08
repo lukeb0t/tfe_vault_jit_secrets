@@ -24,7 +24,7 @@ output "kv_mount_path" {
 }
 
 output "tfe_workspace_env_vars" {
-  description = "Map of environment variable names and values to set in the TFE workspace (for reference when configure_tfe_workspace = false)."
+  description = "Map of the non-sensitive core TFE workspace env vars. Add TFC_VAULT_ENCODED_CACERT separately when Vault uses self-signed TLS."
   value = {
     TFC_VAULT_PROVIDER_AUTH = "true"
     TFC_VAULT_ADDR          = var.vault_addr

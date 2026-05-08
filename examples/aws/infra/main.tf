@@ -25,7 +25,8 @@ module "tfe" {
   subnet_id = module.vault.subnet_id
 }
 
-# Allow TFE → Vault on port 8200 (Vault API) and 443 (OIDC discovery endpoint on Vault is not needed — Vault reaches TFE)
+# Allow TFE → Vault on port 8200 (Vault API). Vault reaches TFE over the VPC
+# using its own outbound access, so Vault does not need an inbound 443 rule here.
 resource "aws_security_group_rule" "vault_from_tfe" {
   type                     = "ingress"
   from_port                = 8200

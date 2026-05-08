@@ -1,6 +1,6 @@
 # dynamic_vault_secrets
 
-Terraform module that configures **Vault-backed dynamic AWS credentials for Terraform Enterprise**. TFE workspaces authenticate to Vault via JWT workload identity; Vault then generates short-lived AWS STS credentials via the AWS secrets engine and injects them directly into the workspace environment. No static AWS access keys are stored anywhere.
+Terraform module that configures **Vault-backed dynamic AWS credentials for Terraform Enterprise**. TFE workspaces authenticate to Vault via JWT workload identity; Vault then generates short-lived AWS STS credentials via the AWS secrets engine, and TFE injects them into the workspace environment. No static AWS access keys are stored anywhere.
 
 **Reference:** [Terraform Vault-backed dynamic credentials for AWS](https://developer.hashicorp.com/validated-patterns/terraform/terraform-vault-backed-dynamic-credentials-aws)
 
@@ -11,7 +11,7 @@ TFE workspace run
       │
       │  1. TFE mints a workload-identity JWT
       ▼
-Vault JWT auth backend
+Vault JWT auth backend  (default mount: jwt-aws-provider/)
       │
       │  2. Vault validates JWT, issues a short-lived Vault token
       ▼
@@ -149,7 +149,7 @@ This is handled automatically by the trust policy set on `aws_iam_role.vault_tar
 | `vault_namespace` | Vault namespace. Leave empty for root. | `string` | `""` | |
 | `tfe_project` | TFE project name. Use `"*"` to match all. | `string` | `"*"` | |
 | `tfe_workspace` | TFE workspace name. Use `"*"` to match all. | `string` | `"*"` | |
-| `jwt_backend_path` | Mount path for the JWT auth backend. | `string` | `"jwt"` | |
+| `jwt_backend_path` | Mount path for the JWT auth backend. | `string` | `"jwt-aws-provider"` | |
 | `vault_role_name` | Name of the Vault JWT auth role. | `string` | `"tfe-vault-backed-aws"` | |
 | `vault_policy_name` | Name of the Vault policy. | `string` | `"tfe-vault-backed-aws-policy"` | |
 | `workload_identity_audience` | Expected `aud` claim in TFE JWT tokens. | `string` | `"vault.workload.identity"` | |
@@ -162,9 +162,12 @@ This is handled automatically by the trust policy set on `aws_iam_role.vault_tar
 | `max_sts_ttl_seconds` | Maximum TTL for generated STS credentials. | `number` | `43200` | |
 | `target_iam_role_name` | Name of the AWS IAM role Vault assumes to generate credentials. | `string` | `"vault-dynamic-creds-target"` | |
 | `target_iam_policy_json` | IAM policy JSON for the target role. Defaults to a read-only EC2/S3 demo policy. | `string` | `""` | |
-| `configure_tfe_workspace` | Create `tfe_variable` resources injecting all required env vars. Requires `tfe` provider. | `bool` | `false` | |
+| `configure_tfe_workspace` | Create `tfe_variable` resources injecting the workspace env vars for this flow. Requires `tfe` provider. | `bool` | `false` | |
 | `tfe_workspace_id` | TFE workspace ID. Required when `configure_tfe_workspace = true`. | `string` | `""` | |
 | `vault_ca_cert_b64` | Base64-encoded PEM CA cert for self-signed Vault TLS. | `string` (sensitive) | `""` | |
+| `set_vault_auth_vars` | When `true`, also inject the generic Vault auth vars (`TFC_VAULT_PROVIDER_AUTH`, `TFC_VAULT_ADDR`, `TFC_VAULT_AUTH_PATH`, `TFC_VAULT_RUN_ROLE`). Set `false` only if another process writes those same values for this AWS flow. | `bool` | `true` | |
+| `create_jwt_backend` | When `true`, create the JWT auth backend at `jwt_backend_path`. Set `false` only to reuse an existing backend at that exact path. | `bool` | `true` | |
+| `tfe_ca_cert_pem` | PEM-encoded CA cert for TFE's self-signed TLS certificate. Needed so Vault can verify TFE's OIDC discovery endpoint when `create_jwt_backend = true`. | `string` | `""` | |
 
 ## Outputs
 
@@ -176,7 +179,7 @@ This is handled automatically by the trust policy set on `aws_iam_role.vault_tar
 | `vault_role_name` | Name of the JWT auth role. |
 | `vault_policy_name` | Name of the Vault policy. |
 | `target_iam_role_arn` | ARN of the AWS IAM role Vault assumes to generate credentials. |
-| `tfe_workspace_env_vars` | Map of all environment variables required in the TFE workspace. |
+| `tfe_workspace_env_vars` | Map of the non-sensitive workspace env vars for this flow. Add `TFC_VAULT_ENCODED_CACERT` and `TFC_VAULT_NAMESPACE` separately when needed. |
 
 ## TFE workspace environment variables
 
@@ -184,17 +187,21 @@ When `configure_tfe_workspace = false` (the default), set these in the TFE works
 
 | Variable | Value | Notes |
 |----------|-------|-------|
-| `TFC_VAULT_PROVIDER_AUTH` | `true` | Enables Vault dynamic credentials |
+| `TFC_VAULT_PROVIDER_AUTH` | `true` | Enables Vault-backed authentication |
 | `TFC_VAULT_ADDR` | `https://vault.example.com:8200` | Must be reachable from TFE agents |
+| `TFC_VAULT_AUTH_PATH` | `jwt-aws-provider` | Must match `jwt_backend_path` |
 | `TFC_VAULT_RUN_ROLE` | `tfe-vault-backed-aws` | Must match `vault_role_name` |
+| `TFC_VAULT_NAMESPACE` | `""` | Omit for the root namespace |
 | `TFC_VAULT_BACKED_AWS_AUTH` | `true` | Enables vault-backed AWS credential injection |
 | `TFC_VAULT_BACKED_AWS_AUTH_TYPE` | `assumed_role` | Must match secrets engine `credential_type` |
-| `TFC_VAULT_BACKED_AWS_ROLE` | `tfe-dynamic-aws-role` | Must match `aws_secrets_role_name` |
 | `TFC_VAULT_BACKED_AWS_MOUNT_PATH` | `aws` | Must match `aws_secrets_backend_path` |
-| `TFC_VAULT_BACKED_AWS_RUN_ROLE` | `tfe-vault-backed-aws` | Must match `vault_role_name` |
+| `TFC_VAULT_BACKED_AWS_RUN_VAULT_ROLE` | `tfe-dynamic-aws-role` | Must match `aws_secrets_role_name` |
+| `TFC_VAULT_BACKED_AWS_RUN_ROLE_ARN` | `arn:aws:iam::123456789012:role/vault-dynamic-creds-target` | Must match the IAM role Vault assumes |
 | `TFC_VAULT_ENCODED_CACERT` | `<base64 PEM>` | Required for self-signed TLS (**sensitive**) |
 
-These are also available as the `tfe_workspace_env_vars` output.
+The non-sensitive subset is also available as the `tfe_workspace_env_vars` output. Add `TFC_VAULT_ENCODED_CACERT` and, if used, `TFC_VAULT_NAMESPACE` separately.
+
+> **Important:** Each dynamic credential flow needs its own `TFC_VAULT_AUTH_PATH` and `TFC_VAULT_RUN_ROLE`. Do not point a vault-backed AWS workspace at the `dynamic_provider_cred` backend/role.
 
 ## What resources are created
 

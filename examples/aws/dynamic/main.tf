@@ -1,10 +1,11 @@
 # ─── TFE Workspace ──────────────────────────────────────────────────────────
-# Create a demo workspace for testing both dynamic credential patterns.
+# Create a demo workspace that shows module-driven variable injection.
+# Use the dedicated test workspaces below for end-to-end runs of each flow.
 resource "tfe_workspace" "demo" {
   name         = "vault-dynamic-creds-demo"
   organization = var.tfe_org_name
   auto_apply   = false  # require manual approval for safety
-  description  = "Demo workspace for testing Vault-backed dynamic credentials"
+  description  = "Demo workspace showing Vault dynamic credential variables"
 }
 
 # ─── Use Case 1: Dynamic Provider Credentials ───────────────────────────────
@@ -30,8 +31,8 @@ module "dynamic_provider_cred" {
 # ─── Use Case 2: Vault-backed AWS Dynamic Secrets ───────────────────────────
 # Configures Vault AWS secrets engine so TFE can obtain short-lived AWS
 # credentials via Vault rather than using static IAM keys.
-# This module creates its own JWT backend at "jwt-aws" (the default), independent
-# of dynamic_provider_cred's backend at "jwt".
+# This module creates its own JWT backend at "jwt-aws-provider" by default,
+# independent from dynamic_provider_cred's "jwt-vault-provider" backend.
 module "dynamic_vault_secrets" {
   source = "../../../dynamic_vault_secrets"
 
@@ -47,8 +48,8 @@ module "dynamic_vault_secrets" {
   tfe_workspace_id        = tfe_workspace.demo.id
   vault_ca_cert_b64       = var.vault_ca_cert_b64
   tfe_ca_cert_pem         = var.tfe_ca_cert_pem
-  # dynamic_provider_cred manages the generic Vault auth vars (TFC_VAULT_PROVIDER_AUTH,
-  # TFC_VAULT_ADDR, TFC_VAULT_RUN_ROLE) for this workspace; avoid duplicate variable errors.
+  # The demo workspace above is only a combined-variable example; the dedicated
+  # aws_test workspace below sets the AWS flow's auth path and run role explicitly.
   set_vault_auth_vars = false
 }
 

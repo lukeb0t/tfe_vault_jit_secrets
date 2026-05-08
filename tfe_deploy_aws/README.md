@@ -1,4 +1,4 @@
-# tfe_deploy
+# tfe_deploy_aws
 
 Deploys Terraform Enterprise Flexible Deployment Options (disk mode) on a single Ubuntu 22.04 EC2 instance using Docker Compose, a self-signed TLS certificate, and a `nip.io` hostname.
 
@@ -30,13 +30,26 @@ Internet ---------> |  EIP + nip.io hostname      |
 - Terraform Enterprise license
 - An email and strong password for the initial TFE admin user
 
+## Usage
+
+```hcl
+module "tfe" {
+  source = "./tfe_deploy_aws"
+
+  cluster_name   = "my-tfe"
+  tfe_license    = var.tfe_license
+  admin_email    = "admin@example.com"
+  admin_password = var.admin_password
+}
+```
+
 ## Quick start
 
 1. Copy `terraform.tfvars.example` to `terraform.tfvars` and fill in the license and admin credentials.
 2. Run `terraform init` in this module directory.
 3. Run `terraform apply` to create networking, IAM, and the TFE EC2 instance.
 4. Wait for cloud-init to finish; first boot typically takes 10-15 minutes.
-5. Open the `tfe_url` output and retrieve tokens from SSM if needed.
+5. Open the `tfe_url` output and retrieve the admin and org tokens from SSM if needed.
 
 ## Inputs
 
@@ -48,8 +61,9 @@ Internet ---------> |  EIP + nip.io hostname      |
 | `admin_email` | `string` | n/a | Email for the initial admin user. |
 | `admin_password` | `string` | n/a | Initial admin password. |
 | `org_name` | `string` | `"hashicorp-demo"` | TFE organization created during bootstrap. |
-| `vpc_id` | `string` | `null` | Existing VPC ID; `null` creates a new VPC. |
-| `subnet_id` | `string` | `null` | Existing subnet ID; required when `vpc_id` is set. |
+| `create_networking` | `bool` | `true` | Create a VPC/subnet inside this module. Set `false` when reusing an existing network such as `vault_deploy_aws` outputs. |
+| `vpc_id` | `string` | `null` | Existing VPC ID; used when `create_networking = false`. |
+| `subnet_id` | `string` | `null` | Existing subnet ID; required when `create_networking = false`. |
 | `vpc_cidr` | `string` | `"10.101.0.0/16"` | CIDR for a new VPC. |
 | `subnet_cidr` | `string` | `"10.101.1.0/24"` | CIDR for a new public subnet. |
 | `instance_type` | `string` | `"m5.xlarge"` | EC2 instance size for TFE. |

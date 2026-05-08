@@ -70,7 +70,7 @@ variable "vault_policy_name" {
 }
 
 variable "secret_paths" {
-  description = "Vault secret paths the policy should grant read access to (e.g. ['secret/data/myapp/*'])."
+  description = "Vault secret paths the policy should grant read access to (e.g. ['kv/data/myapp/*']). For the built-in demo KV mount, include kv/data/*."
   type        = list(string)
   default     = ["secret/data/*"]
 }
@@ -98,13 +98,15 @@ variable "vault_ca_cert_b64" {
   default     = ""
 }
 
-# ─── KV Secrets Mount (optional demo) ─────────────────────────────────────
+# ─── TFE OIDC Discovery TLS (optional) ────────────────────────────────────
 
 variable "tfe_ca_cert_pem" {
   description = "PEM-encoded CA certificate for TFE's self-signed TLS cert. Required when TFE uses a self-signed cert so Vault can verify the OIDC discovery endpoint."
   type        = string
   default     = ""
 }
+
+# ─── KV Secrets Mount (optional demo) ─────────────────────────────────────
 
 variable "create_demo_kv_mount" {
   description = "When true, create a KV v2 secrets mount at kv/ as a demonstration target for the TFE workspace."

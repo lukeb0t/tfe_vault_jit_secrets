@@ -16,16 +16,19 @@ This repo implements two HashiCorp validated patterns:
 ```
 tfe_vault_jit_secrets/
 │
-│  ── Step 1: choose your cloud for Vault ──
+│  ── Deploy infrastructure ──
 ├── vault_deploy_aws/       # Vault Enterprise on AWS   (EC2 + VPC + KMS + SSM)
-├── vault_deploy_azure/     # Vault Enterprise on Azure (VM  + VNet + Azure Key Vault)
+├── tfe_deploy_aws/         # Terraform Enterprise on AWS (EC2 + VPC + SSM)
+├── vault_deploy_azure/     # Vault Enterprise on Azure (VM + VNet + Azure Key Vault)
 │
-│  ── Step 2: configure TFE dynamic secrets (cloud-agnostic) ──
-├── dynamic_provider_cred/  # TFE → Vault JWT auth  → short-lived Vault token
-├── dynamic_vault_secrets/  # TFE → Vault JWT auth  → short-lived AWS STS creds
+│  ── Configure dynamic credential flows ──
+├── dynamic_provider_cred/  # TFE → jwt-vault-provider → Vault token → Vault provider
+├── dynamic_vault_secrets/  # TFE → jwt-aws-provider   → Vault token → AWS STS creds
 │
 └── examples/
-    ├── aws/                # Minimal root module calling vault_deploy_aws
+    ├── aws/
+    │   ├── infra/          # Deploys vault_deploy_aws + tfe_deploy_aws
+    │   └── dynamic/        # Configures both dynamic flows + test workspaces
     └── azure/              # Minimal root module calling vault_deploy_azure
 ```
 
@@ -142,14 +145,34 @@ Self-contained AWS deployment. Creates its own VPC and networking by default.
 | `cluster_name` | Name prefix for all resources | required |
 | `vault_version` | Docker image tag | `"2.0.0-ent"` |
 | `vault_license` | Enterprise license (sensitive) | required |
-| `aws_region` | AWS region | required |
 | `vpc_id` | Existing VPC (`null` = module creates one) | `null` |
 | `subnet_id` | Existing subnet (required when `vpc_id` set) | `null` |
 | `key_pair_name` | EC2 key pair for SSH access | `null` |
 
-Key outputs: `vault_addr`, `vault_public_ip`, `ssm_root_token_path`, `iam_role_arn`
+Key outputs: `vault_addr`, `vault_public_ip`, `ssm_root_token_path`, `ssm_tls_cert_b64_path`, `iam_role_arn`
 
 → See [`vault_deploy_aws/README.md`](./vault_deploy_aws/README.md) for full input/output reference.
+
+---
+
+### [`tfe_deploy_aws`](./tfe_deploy_aws/) — Deploy Terraform Enterprise on AWS
+
+Deploys a single Terraform Enterprise Flexible Deployment Options instance on AWS using Docker Compose, self-signed TLS, and `nip.io`. Use `create_networking = false` to join the VPC created by `vault_deploy_aws`.
+
+| Input | Description | Default |
+|---|---|---|
+| `cluster_name` | Name prefix for all resources | required |
+| `tfe_version` | TFE Docker image tag | `"v202505-1"` |
+| `tfe_license` | Terraform Enterprise license (sensitive) | required |
+| `admin_email` | Initial admin email | required |
+| `admin_password` | Initial admin password (sensitive) | required |
+| `org_name` | Bootstrap organization name | `"hashicorp-demo"` |
+| `create_networking` | Create a VPC/subnet inside the module | `true` |
+| `vpc_id` / `subnet_id` | Existing network to reuse when `create_networking = false` | `null` |
+
+Key outputs: `tfe_url`, `tfe_hostname`, `ssm_admin_token_path`, `ssm_org_token_path`, `vpc_id`, `subnet_id`
+
+→ See [`tfe_deploy_aws/README.md`](./tfe_deploy_aws/README.md) for full input/output reference.
 
 ---
 
@@ -176,7 +199,7 @@ Key outputs: `vault_addr`, `vault_public_ip`, `key_vault_name`, `key_vault_uri`
 
 ### [`dynamic_provider_cred`](./dynamic_provider_cred/) — Use Case A: TFE Vault Provider Credentials
 
-Configures Vault as a trusted OIDC identity provider for TFE. Workspaces receive a short-lived Vault token without managing any static credential.
+Configures Vault JWT auth to trust TFE workload identity tokens. Workspaces receive a short-lived Vault token without managing any static credential.
 
 **Works with Vault deployed on either AWS or Azure.**
 
@@ -199,10 +222,10 @@ Extends Use Case A: Vault exchanges the TFE JWT for short-lived AWS STS credenti
 ### Option A — Vault on AWS
 
 ```bash
-cd examples/aws
+cd examples/aws/infra
 cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars: set vault_license, aws_region, cluster_name
-export TF_VAR_vault_license="<your license>"
+# Edit terraform.tfvars: set region, cluster_name, tfe_license, admin_email, and admin_password
+export TF_VAR_vault_license="<your Vault license>"
 terraform init && terraform apply
 ```
 
@@ -210,7 +233,7 @@ Retrieve the root token after cloud-init completes (~2–3 min):
 
 ```bash
 aws ssm get-parameter \
-  --name "$(terraform output -raw ssm_root_token_path)" \
+  --name "$(terraform output -raw vault_root_token_ssm_path)" \
   --with-decryption \
   --query Parameter.Value --output text
 ```
@@ -234,18 +257,18 @@ az keyvault secret show \
   --query value -o tsv
 ```
 
-### Step 2 — Configure TFE dynamic secrets (same for both clouds)
+### Step 2 — Configure TFE dynamic secrets
+
+For the end-to-end AWS example, apply `examples/aws/dynamic` after `examples/aws/infra` is ready. Use the `infra/` outputs to supply the Vault root token, Vault TLS cert (`vault_tls_cert_b64_ssm_path`), Vault IAM role ARN, TFE hostname, and TFE org token.
 
 ```bash
-export VAULT_ADDR=$(terraform output -raw vault_addr)
-export VAULT_TOKEN=<root_token>
-
-# Use Case A: dynamic Vault provider credentials
-cd dynamic_provider_cred && terraform init && terraform apply
-
-# Use Case B: Vault-backed AWS STS credentials
-cd dynamic_vault_secrets && terraform init && terraform apply
+cd ../dynamic
+terraform init && terraform apply
 ```
+
+This configuration creates the `vault-kv-test` and `aws-creds-test` workspaces, uploads their test configs with a temporary TFE team token, and leaves runs unqueued. Trigger the runs manually from the TFE UI.
+
+If Vault is deployed on Azure, the two dynamic modules are still cloud-agnostic — consume `dynamic_provider_cred` and `dynamic_vault_secrets` from your own root module once you have `vault_addr`, a Vault bootstrap token, and your TFE connection details.
 
 ---
 

@@ -3,8 +3,9 @@
 #
 # Configures Vault-backed dynamic AWS credentials for Terraform Enterprise.
 # TFE workspaces authenticate to Vault via JWT workload identity, receive a
-# short-lived Vault token, and then Vault directly injects STS credentials
-# into the workspace environment — no static AWS credentials required.
+# short-lived Vault token, then request AWS credentials from Vault's AWS
+# secrets engine; TFE injects the resulting STS credentials into the workspace
+# environment without any static AWS keys.
 #
 # Architecture:
 #   TFE → (JWT) → Vault JWT auth → Vault token
@@ -114,10 +115,11 @@ resource "vault_policy" "tfe_backed_aws" {
 }
 
 # ─── Vault JWT Auth Backend ──────────────────────────────────────────────────
-# Vault trusts TFE as an OIDC identity provider. By default this module creates
-# its own JWT backend at "jwt-aws", keeping it independent from dynamic_provider_cred
-# (which defaults to "jwt"). Set create_jwt_backend = false and supply
-# jwt_backend_path only if you explicitly want to share an existing backend.
+# Vault trusts TFE's workload identity tokens via JWT auth. By default this
+# module creates its own backend at "jwt-aws-provider", separate from
+# dynamic_provider_cred's default "jwt-vault-provider" backend.
+# Set create_jwt_backend = false only when reusing an existing backend at the
+# exact same path.
 
 resource "vault_jwt_auth_backend" "tfe" {
   count = var.create_jwt_backend ? 1 : 0
@@ -193,10 +195,11 @@ resource "aws_iam_role_policy" "vault_target" {
 }
 
 # ─── TFE Workspace Variables ──────────────────────────────────────────────────
-# Vault-backed AWS credential injection requires these env vars in the workspace.
-# The Vault provider auth variables (TFC_VAULT_PROVIDER_AUTH, TFC_VAULT_ADDR,
-# TFC_VAULT_RUN_ROLE) are also required — either set them here or use the
-# dynamic_provider_cred module alongside this one.
+# Vault-backed AWS credential injection requires both the generic Vault auth
+# vars and the AWS-specific vars below.
+# If set_vault_auth_vars = false, another process must write the generic vars
+# using this module's auth path and run role (for example jwt-aws-provider and
+# tfe-vault-backed-aws) — do not reuse dynamic_provider_cred's auth path/role.
 #
 # Un-comment the tfe provider in versions.tf and set configure_tfe_workspace = true.
 

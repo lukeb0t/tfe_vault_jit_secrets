@@ -1,4 +1,4 @@
-# vault_deploy
+# vault_deploy_aws
 
 Terraform module that deploys a single-node **Vault Enterprise** server on AWS EC2 using Docker and cloud-init. The instance bootstraps completely automatically — no manual steps, no SSH access required.
 
@@ -16,14 +16,15 @@ Terraform module that deploys a single-node **Vault Enterprise** server on AWS E
 
 ```hcl
 module "vault" {
-  source = "./vault_deploy"
+  source = "./vault_deploy_aws"
 
   cluster_name  = "my-vault"
   vault_version = "2.0.0-ent"
   vault_license = var.vault_license   # sensitive — do not hardcode
 
+  # Optional: omit these to let the module create its own VPC + public subnet.
   vpc_id    = "vpc-xxxxxxxx"
-  subnet_id = "subnet-xxxxxxxx"       # must be a public subnet with IGW
+  subnet_id = "subnet-xxxxxxxx"      # must be a public subnet with IGW
 }
 ```
 
@@ -72,8 +73,10 @@ The principal running Terraform needs:
 |------|-------------|------|---------|----------|
 | `cluster_name` | Unique name prefix applied to all resources (e.g. `my-vault`). | `string` | — | ✅ |
 | `vault_license` | Vault Enterprise license string. Passed to the container as `VAULT_LICENSE`. | `string` (sensitive) | — | ✅ |
-| `vpc_id` | ID of the VPC where the EC2 instance will be deployed. | `string` | — | ✅ |
-| `subnet_id` | ID of a **public** subnet (must have internet gateway route). | `string` | — | ✅ |
+| `vpc_id` | ID of an existing VPC. Leave `null` to let the module create one. | `string` | `null` | |
+| `subnet_id` | ID of an existing **public** subnet. Required only when `vpc_id` is set. | `string` | `null` | |
+| `vpc_cidr` | CIDR block for a module-managed VPC. Used only when `vpc_id = null`. | `string` | `"10.100.0.0/16"` | |
+| `subnet_cidr` | CIDR block for a module-managed public subnet. Used only when `vpc_id = null`. | `string` | `"10.100.1.0/24"` | |
 | `vault_version` | Docker image tag for `hashicorp/vault-enterprise` (e.g. `2.0.0-ent`). | `string` | `"2.0.0-ent"` | |
 | `instance_type` | EC2 instance type. | `string` | `"m5.large"` | |
 | `key_pair_name` | Name of an existing EC2 key pair for SSH access. `null` to disable (use SSM instead). | `string` | `null` | |
@@ -97,13 +100,17 @@ The principal running Terraform needs:
 | `kms_key_arn` | KMS key ARN used for auto-unseal. |
 | `ssm_prefix` | SSM Parameter Store path prefix (`/vault/<cluster_name>`). |
 | `ssm_root_token_path` | Full SSM path to the root token (`/vault/<cluster_name>/root_token`). |
+| `ssm_tls_cert_b64_path` | Full SSM path to the base64-encoded Vault TLS cert (`/vault/<cluster_name>/tls_cert_b64`). Useful for `vault_ca_cert_b64`. |
 | `vault_tls_cert_host_path` | Host path of the self-signed TLS cert. Retrieve via SSM Session Manager and set as `VAULT_CACERT` locally. |
+| `vpc_id` | VPC ID used by this deployment. |
+| `subnet_id` | Public subnet ID used by this deployment. |
 
 ## SSM Parameter Store layout
 
 After successful cloud-init, the following `SecureString` parameters are created:
 
 ```
+/vault/<cluster_name>/tls_cert_b64
 /vault/<cluster_name>/root_token
 /vault/<cluster_name>/recovery_key_1
 /vault/<cluster_name>/recovery_key_2

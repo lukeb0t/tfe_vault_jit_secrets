@@ -29,7 +29,7 @@ output "target_iam_role_arn" {
 }
 
 output "tfe_workspace_env_vars" {
-  description = "Map of all environment variables to set in the TFE workspace (for reference when configure_tfe_workspace = false)."
+  description = "Map of the non-sensitive workspace env vars for this flow. Add TFC_VAULT_ENCODED_CACERT and TFC_VAULT_NAMESPACE separately when needed."
   value = {
     TFC_VAULT_PROVIDER_AUTH                = "true"
     TFC_VAULT_ADDR                         = var.vault_addr
