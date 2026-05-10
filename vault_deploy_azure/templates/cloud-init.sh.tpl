@@ -6,7 +6,7 @@
 # Template variables injected by Terraform's templatefile():
 #   cluster_name, vault_version, vault_license, tenant_id,
 #   key_vault_name, key_vault_key_name, managed_identity_client_id,
-#   vault_api_addr
+#   vault_api_addr, vault_use_custom_tls, vault_tls_cert_pem_b64, vault_tls_key_pem_b64
 #
 # Key differences from vault_deploy_aws/templates/cloud-init.sh.tpl:
 #   - apt-get / docker.io  instead of dnf / docker
@@ -35,6 +35,9 @@ KV_KEY_NAME="${key_vault_key_name}"
 MI_CLIENT_ID="${managed_identity_client_id}"
 # PUBLIC_IP is the static IP pre-allocated by Terraform before this script runs.
 PUBLIC_IP="${vault_api_addr}"
+USE_CUSTOM_TLS="${vault_use_custom_tls}"
+CUSTOM_TLS_CERT_B64="${vault_tls_cert_pem_b64}"
+CUSTOM_TLS_KEY_B64="${vault_tls_key_pem_b64}"
 
 # ─── 1. Wait for Ubuntu's unattended-upgrades dpkg lock ──────────────────────
 # Ubuntu cloud VMs run unattended-upgrades on first boot, which holds the dpkg
@@ -72,11 +75,16 @@ mkdir -p /opt/vault/{config,data,certs,logs}
 chown -R 100:1000 /opt/vault/data /opt/vault/certs
 chmod 755 /opt/vault/{config,data,certs,logs}
 
-# ─── 5. Generate self-signed TLS certificate ─────────────────────────────────
-# The cert includes both IPs as SANs and a DNS name so clients can connect
-# by IP (external) or hostname (internal) without TLS verification errors.
-log "Generating self-signed TLS certificate (valid 10 years)..."
-cat > /tmp/vault-openssl.cnf <<SSLCNF
+# ─── 5. Prepare TLS certificate ──────────────────────────────────────────────
+if [ "$USE_CUSTOM_TLS" = "true" ]; then
+  log "Writing user-provided TLS certificate and key..."
+  echo "$CUSTOM_TLS_CERT_B64" | base64 -d > /opt/vault/certs/vault.crt
+  echo "$CUSTOM_TLS_KEY_B64" | base64 -d > /opt/vault/certs/vault.key
+else
+  # The cert includes both IPs as SANs and a DNS name so clients can connect
+  # by IP (external) or hostname (internal) without TLS verification errors.
+  log "Generating self-signed TLS certificate (valid 10 years)..."
+  cat > /tmp/vault-openssl.cnf <<SSLCNF
 [req]
 default_bits       = 4096
 prompt             = no
@@ -103,17 +111,19 @@ DNS.1 = vault.${cluster_name}
 DNS.2 = vault.local
 SSLCNF
 
-openssl req -x509 -newkey rsa:4096 \
-  -keyout /opt/vault/certs/vault.key \
-  -out    /opt/vault/certs/vault.crt \
-  -days   3650 -nodes \
-  -config /tmp/vault-openssl.cnf
+  openssl req -x509 -newkey rsa:4096 \
+    -keyout /opt/vault/certs/vault.key \
+    -out    /opt/vault/certs/vault.crt \
+    -days   3650 -nodes \
+    -config /tmp/vault-openssl.cnf
+
+  rm -f /tmp/vault-openssl.cnf
+fi
 
 chmod 644 /opt/vault/certs/vault.crt
 chmod 640 /opt/vault/certs/vault.key  # vault user (UID 100) reads via group 1000
 chown 100:1000 /opt/vault/certs/vault.crt /opt/vault/certs/vault.key
-rm -f /tmp/vault-openssl.cnf
-log "TLS certificate written to /opt/vault/certs/"
+log "TLS certificate ready at /opt/vault/certs/"
 
 # ─── 6. Write vault.hcl ──────────────────────────────────────────────────────
 # Uses an unquoted heredoc (<<VAULTCFG) so bash expands $PUBLIC_IP and
@@ -266,6 +276,11 @@ if [ "$INIT_STATUS" = "false" ]; then
     log "  stored secret: $name"
   }
 
+  # Store the base64-encoded TLS certificate to mirror the AWS module's
+  # /tls_cert_b64 artifact used by downstream modules.
+  TLS_CERT_B64=$(base64 -w0 /opt/vault/certs/vault.crt)
+  store_secret "vault-tls-cert-b64" "$TLS_CERT_B64"
+
   store_secret "vault-root-token" "$ROOT_TOKEN"
 
   # Store all five recovery keys.
@@ -276,7 +291,7 @@ if [ "$INIT_STATUS" = "false" ]; then
   done
 
   # Clear sensitive values from shell memory.
-  unset ROOT_TOKEN INIT_JSON AKV_TOKEN
+  unset ROOT_TOKEN INIT_JSON AKV_TOKEN TLS_CERT_B64
 
   log "=== Vault initialized. Secrets stored in Azure Key Vault '$KV_NAME'. ==="
 else

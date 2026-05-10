@@ -31,3 +31,17 @@ variable "admin_ssh_public_key" {
   description = "SSH public key string for the azureuser account."
   type        = string
 }
+
+variable "vault_tls_cert_pem" {
+  description = "Optional PEM-encoded TLS certificate for Vault listener. Leave empty to auto-generate self-signed cert."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "vault_tls_key_pem" {
+  description = "Optional PEM-encoded private key for Vault listener certificate. Leave empty to auto-generate self-signed key."
+  type        = string
+  sensitive   = true
+  default     = ""
+}

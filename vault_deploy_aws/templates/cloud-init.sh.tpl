@@ -6,7 +6,8 @@
 # =============================================================================
 # Template variables (injected by Terraform templatefile):
 #   cluster_name, vault_version, vault_license, kms_key_id,
-#   aws_region, ssm_prefix, vault_api_addr
+#   aws_region, ssm_prefix, vault_api_addr,
+#   vault_use_custom_tls, vault_tls_cert_pem_b64, vault_tls_key_pem_b64
 # =============================================================================
 set -euo pipefail
 
@@ -24,6 +25,9 @@ KMS_KEY_ID="${kms_key_id}"
 AWS_REGION="${aws_region}"
 SSM_PREFIX="${ssm_prefix}"
 VAULT_API_ADDR="${vault_api_addr}"
+USE_CUSTOM_TLS="${vault_use_custom_tls}"
+CUSTOM_TLS_CERT_B64="${vault_tls_cert_pem_b64}"
+CUSTOM_TLS_KEY_B64="${vault_tls_key_pem_b64}"
 
 # ─── System packages ─────────────────────────────────────────────────────────
 log "Installing system packages..."
@@ -48,9 +52,14 @@ mkdir -p /opt/vault/{config,data,certs,logs}
 chown -R 100:1000 /opt/vault/data /opt/vault/certs
 chmod 755 /opt/vault/data /opt/vault/{config,certs,logs}
 
-# ─── Self-signed TLS certificate ─────────────────────────────────────────────
-log "Generating self-signed TLS certificate (valid 10 years)..."
-cat > /tmp/vault-openssl.cnf <<SSLCNF
+# ─── TLS certificate ─────────────────────────────────────────────────────────
+if [ "$USE_CUSTOM_TLS" = "true" ]; then
+  log "Writing user-provided TLS certificate and key..."
+  echo "$CUSTOM_TLS_CERT_B64" | base64 -d > /opt/vault/certs/vault.crt
+  echo "$CUSTOM_TLS_KEY_B64" | base64 -d > /opt/vault/certs/vault.key
+else
+  log "Generating self-signed TLS certificate (valid 10 years)..."
+  cat > /tmp/vault-openssl.cnf <<SSLCNF
 [req]
 default_bits       = 4096
 prompt             = no
@@ -77,17 +86,19 @@ DNS.1 = vault.${cluster_name}
 DNS.2 = vault.local
 SSLCNF
 
-openssl req -x509 -newkey rsa:4096 \
-  -keyout /opt/vault/certs/vault.key \
-  -out    /opt/vault/certs/vault.crt \
-  -days 3650 -nodes \
-  -config /tmp/vault-openssl.cnf
+  openssl req -x509 -newkey rsa:4096 \
+    -keyout /opt/vault/certs/vault.key \
+    -out    /opt/vault/certs/vault.crt \
+    -days 3650 -nodes \
+    -config /tmp/vault-openssl.cnf
+
+  rm -f /tmp/vault-openssl.cnf
+fi
 
 chmod 644 /opt/vault/certs/vault.crt
 chmod 640 /opt/vault/certs/vault.key   # vault user (UID 100) owns this via group 1000
 chown 100:1000 /opt/vault/certs/vault.crt /opt/vault/certs/vault.key
-rm -f /tmp/vault-openssl.cnf
-log "TLS certificate written to /opt/vault/certs/"
+log "TLS certificate ready at /opt/vault/certs/"
 
 log "Storing TLS certificate in SSM: $SSM_PREFIX/tls_cert_b64"
 base64 /opt/vault/certs/vault.crt > /tmp/vault_cert_b64.txt

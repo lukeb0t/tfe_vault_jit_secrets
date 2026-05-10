@@ -83,6 +83,20 @@ variable "admin_ssh_public_key" {
   type        = string
 }
 
+variable "vault_tls_cert_pem" {
+  description = "Optional PEM-encoded TLS certificate for Vault listener. When set, vault_tls_key_pem must also be set. If empty, cloud-init generates a self-signed cert."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "vault_tls_key_pem" {
+  description = "Optional PEM-encoded private key for Vault listener TLS certificate. When set, vault_tls_cert_pem must also be set."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 variable "os_disk_size_gb" {
   description = "Size in GiB of the OS disk. Vault Raft storage shares this disk."
   type        = number

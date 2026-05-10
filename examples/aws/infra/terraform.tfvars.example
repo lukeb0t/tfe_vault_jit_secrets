@@ -5,3 +5,19 @@ tfe_license    = "02MV4UU..."  # TFE Enterprise license
 admin_email    = "admin@example.com"
 admin_password = "Hashi_lab_123!!"
 tfe_org_name   = "hashicorp-demo"
+
+# Optional: existing EC2 key pair for SSH access.
+# key_pair_name = "my-keypair"
+
+# Optional: provide your own Vault listener certificate and key.
+# Leave both empty to let cloud-init generate a self-signed certificate.
+# vault_tls_cert_pem = <<-PEM
+# -----BEGIN CERTIFICATE-----
+# ...
+# -----END CERTIFICATE-----
+# PEM
+# vault_tls_key_pem = <<-PEM
+# -----BEGIN PRIVATE KEY-----
+# ...
+# -----END PRIVATE KEY-----
+# PEM

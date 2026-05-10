@@ -8,6 +8,22 @@ resource "tfe_workspace" "demo" {
   description  = "Demo workspace showing Vault dynamic credential variables"
 }
 
+data "aws_ssm_parameter" "vault_root_token" {
+  count = var.vault_root_token == "" && var.vault_root_token_ssm_path != "" ? 1 : 0
+  name  = var.vault_root_token_ssm_path
+}
+
+data "aws_ssm_parameter" "vault_ca_cert_b64" {
+  count = var.vault_ca_cert_b64 == "" && var.vault_ca_cert_b64_ssm_path != "" ? 1 : 0
+  name  = var.vault_ca_cert_b64_ssm_path
+}
+
+locals {
+  vault_root_token_effective = var.vault_root_token != "" ? var.vault_root_token : try(data.aws_ssm_parameter.vault_root_token[0].value, "")
+  vault_ca_cert_b64_effective = var.vault_ca_cert_b64 != "" ? var.vault_ca_cert_b64 : try(data.aws_ssm_parameter.vault_ca_cert_b64[0].value, "")
+  vault_iam_principal_arn_effective = var.vault_iam_principal_arn != "" ? var.vault_iam_principal_arn : var.vault_iam_role_arn
+}
+
 # ─── Use Case 1: Dynamic Provider Credentials ───────────────────────────────
 # Configures Vault JWT auth so TFE can authenticate to Vault and use it
 # as a credential provider (e.g., reading KV secrets during plan/apply).
@@ -15,7 +31,7 @@ module "dynamic_vault_secrets" {
   source = "../../../dynamic_vault_secrets"
 
   vault_addr       = var.vault_addr
-  vault_token      = var.vault_root_token
+  vault_token      = local.vault_root_token_effective
   tfe_hostname     = var.tfe_hostname
   tfe_organization = var.tfe_org_name
   tfe_project      = "*"
@@ -23,7 +39,7 @@ module "dynamic_vault_secrets" {
 
   tfe_workspace_id     = tfe_workspace.demo.id
   tfe_token            = var.tfe_org_token
-  vault_ca_cert_b64    = var.vault_ca_cert_b64
+  vault_ca_cert_b64    = local.vault_ca_cert_b64_effective
   tfe_ca_cert_pem      = var.tfe_ca_cert_pem
   create_demo_kv_mount = true
   secret_paths         = ["kv/data/*"]
@@ -38,17 +54,19 @@ module "dynamic_aws_provider_secrets" {
   source = "../../../dynamic_aws_provider_secrets"
 
   vault_addr                 = var.vault_addr
-  vault_token                = var.vault_root_token
+  vault_token                = local.vault_root_token_effective
   tfe_hostname               = var.tfe_hostname
   tfe_organization           = var.tfe_org_name
   tfe_project                = "*"
   tfe_workspace              = "*"
   aws_secrets_backend_region = var.aws_region
-  vault_iam_user_arn         = var.vault_iam_role_arn
+  vault_iam_user_arn         = local.vault_iam_principal_arn_effective
+  vault_aws_access_key_id    = var.vault_aws_access_key_id
+  vault_aws_secret_access_key = var.vault_aws_secret_access_key
 
   tfe_workspace_id    = tfe_workspace.demo.id
   tfe_token           = var.tfe_org_token
-  vault_ca_cert_b64   = var.vault_ca_cert_b64
+  vault_ca_cert_b64   = local.vault_ca_cert_b64_effective
   tfe_ca_cert_pem     = var.tfe_ca_cert_pem
   set_vault_auth_vars = false
 }
@@ -109,10 +127,10 @@ resource "tfe_variable" "kv_test_vault_auth_path" {
 }
 
 resource "tfe_variable" "kv_test_vault_cacert" {
-  count        = var.vault_ca_cert_b64 != "" ? 1 : 0
+  count        = local.vault_ca_cert_b64_effective != "" ? 1 : 0
   workspace_id = tfe_workspace.kv_test.id
   key          = "TFC_VAULT_ENCODED_CACERT"
-  value        = var.vault_ca_cert_b64
+  value        = local.vault_ca_cert_b64_effective
   category     = "env"
   sensitive    = true
 }
@@ -159,10 +177,10 @@ resource "tfe_variable" "aws_test_vault_run_role" {
 }
 
 resource "tfe_variable" "aws_test_vault_cacert" {
-  count        = var.vault_ca_cert_b64 != "" ? 1 : 0
+  count        = local.vault_ca_cert_b64_effective != "" ? 1 : 0
   workspace_id = tfe_workspace.aws_test.id
   key          = "TFC_VAULT_ENCODED_CACERT"
-  value        = var.vault_ca_cert_b64
+  value        = local.vault_ca_cert_b64_effective
   category     = "env"
   sensitive    = true
 }

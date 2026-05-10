@@ -27,7 +27,7 @@ provider "aws" {
 
 provider "vault" {
   address         = var.vault_addr
-  token           = var.vault_root_token
+  token           = local.vault_root_token_effective
   skip_tls_verify = true  # self-signed cert from vault_deploy_aws module
 }
 

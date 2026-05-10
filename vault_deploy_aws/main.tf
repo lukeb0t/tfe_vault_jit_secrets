@@ -30,9 +30,10 @@ locals {
 
   # When vpc_id is null the module creates its own VPC and subnet.
   # When vpc_id is provided the caller must also supply subnet_id.
-  create_networking = var.vpc_id == null
-  vpc_id_resolved   = local.create_networking ? aws_vpc.vault[0].id : var.vpc_id
+  create_networking  = var.vpc_id == null
+  vpc_id_resolved    = local.create_networking ? aws_vpc.vault[0].id : var.vpc_id
   subnet_id_resolved = local.create_networking ? aws_subnet.vault_public[0].id : var.subnet_id
+  custom_tls_enabled = var.vault_tls_cert_pem != "" && var.vault_tls_key_pem != ""
 
   common_tags = merge(
     {
@@ -196,8 +197,8 @@ resource "aws_iam_role_policy" "vault_ssm_init" {
         Sid    = "VaultSSMInitWrite"
         Effect = "Allow"
         Action = [
-          "ssm:PutParameter",  # write root token + recovery keys on init
-          "ssm:GetParameter",  # read back to verify (optional but useful)
+          "ssm:PutParameter", # write root token + recovery keys on init
+          "ssm:GetParameter", # read back to verify (optional but useful)
           "ssm:GetParameters"
         ]
         # Restrict to this cluster's namespace only — no access to other prefixes.
@@ -289,13 +290,16 @@ resource "aws_instance" "vault" {
   user_data_replace_on_change = true
 
   user_data = templatefile("${path.module}/templates/cloud-init.sh.tpl", {
-    cluster_name   = var.cluster_name
-    vault_version  = var.vault_version
-    vault_license  = var.vault_license
-    kms_key_id     = aws_kms_key.vault.key_id
-    aws_region     = data.aws_region.current.name
-    ssm_prefix     = local.ssm_prefix
-    vault_api_addr = aws_eip.vault.public_ip # embedded into TLS SAN + Vault api_addr
+    cluster_name           = var.cluster_name
+    vault_version          = var.vault_version
+    vault_license          = var.vault_license
+    kms_key_id             = aws_kms_key.vault.key_id
+    aws_region             = data.aws_region.current.name
+    ssm_prefix             = local.ssm_prefix
+    vault_api_addr         = aws_eip.vault.public_ip # embedded into TLS SAN + Vault api_addr
+    vault_use_custom_tls   = local.custom_tls_enabled ? "true" : "false"
+    vault_tls_cert_pem_b64 = local.custom_tls_enabled ? base64encode(var.vault_tls_cert_pem) : ""
+    vault_tls_key_pem_b64  = local.custom_tls_enabled ? base64encode(var.vault_tls_key_pem) : ""
   })
 
   metadata_options {
@@ -310,10 +314,20 @@ resource "aws_instance" "vault" {
 
   root_block_device {
     volume_size           = var.root_volume_size_gb
-    volume_type           = "gp3"    # better baseline IOPS than gp2 at same cost
-    encrypted             = true     # encrypt Raft data at rest
+    volume_type           = "gp3" # better baseline IOPS than gp2 at same cost
+    encrypted             = true  # encrypt Raft data at rest
     delete_on_termination = true
   }
 
   tags = merge(local.common_tags, { Name = "${var.cluster_name}-vault" })
+
+  lifecycle {
+    precondition {
+      condition = (
+        (var.vault_tls_cert_pem == "" && var.vault_tls_key_pem == "") ||
+        (var.vault_tls_cert_pem != "" && var.vault_tls_key_pem != "")
+      )
+      error_message = "vault_tls_cert_pem and vault_tls_key_pem must both be set together, or both left empty."
+    }
+  }
 }

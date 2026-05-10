@@ -5,12 +5,14 @@
 module "vault" {
   source = "../../vault_deploy_azure"
 
-  cluster_name        = var.cluster_name
-  vault_version       = var.vault_version
-  vault_license       = var.vault_license
-  location            = var.location
-  resource_group_name = var.resource_group_name
+  cluster_name         = var.cluster_name
+  vault_version        = var.vault_version
+  vault_license        = var.vault_license
+  location             = var.location
+  resource_group_name  = var.resource_group_name
   admin_ssh_public_key = var.admin_ssh_public_key
+  vault_tls_cert_pem   = var.vault_tls_cert_pem
+  vault_tls_key_pem    = var.vault_tls_key_pem
 
   # Module manages its own VNet/subnet by default.
   # Uncomment to bring your own network:
@@ -18,5 +20,5 @@ module "vault" {
   # subnet_id = "/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.Network/virtualNetworks/<vnet>/subnets/<subnet>"
 
   vault_ingress_cidr_blocks = ["0.0.0.0/0"] # restrict in production
-  ssh_ingress_cidr_blocks   = []             # set your IP to enable SSH, e.g. ["1.2.3.4/32"]
+  ssh_ingress_cidr_blocks   = []            # set your IP to enable SSH, e.g. ["1.2.3.4/32"]
 }

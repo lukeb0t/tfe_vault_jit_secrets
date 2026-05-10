@@ -9,7 +9,7 @@ output "vault_public_ip" {
 }
 
 output "key_vault_name" {
-  description = "Azure Key Vault name — contains root token and recovery keys."
+  description = "Azure Key Vault name — contains root token, recovery keys, and tls_cert_b64."
   value       = module.vault.key_vault_name
 }
 
@@ -21,6 +21,11 @@ output "key_vault_uri" {
 output "retrieve_root_token_cmd" {
   description = "Azure CLI command to retrieve the Vault root token from Key Vault."
   value       = "az keyvault secret show --vault-name ${module.vault.key_vault_name} --name vault-root-token --query value -o tsv"
+}
+
+output "retrieve_tls_cert_b64_cmd" {
+  description = "Azure CLI command to retrieve the base64-encoded Vault TLS cert from Key Vault."
+  value       = "az keyvault secret show --vault-name ${module.vault.key_vault_name} --name vault-tls-cert-b64 --query value -o tsv"
 }
 
 output "vnet_id" {

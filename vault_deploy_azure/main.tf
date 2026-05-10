@@ -11,6 +11,7 @@ locals {
   create_networking  = var.vnet_id == null
   vnet_id_resolved   = local.create_networking ? azurerm_virtual_network.vault[0].id : var.vnet_id
   subnet_id_resolved = local.create_networking ? azurerm_subnet.vault_public[0].id : var.subnet_id
+  custom_tls_enabled = var.vault_tls_cert_pem != "" && var.vault_tls_key_pem != ""
 
   common_tags = merge(
     {
@@ -51,8 +52,8 @@ resource "azurerm_key_vault" "vault" {
   location                   = var.location
   resource_group_name        = var.resource_group_name
   tenant_id                  = data.azurerm_client_config.current.tenant_id
-  sku_name                   = "premium"  # premium supports HSM-backed keys
-  enable_rbac_authorization  = true       # use Azure RBAC, not legacy access policies
+  sku_name                   = "premium" # premium supports HSM-backed keys
+  enable_rbac_authorization  = true      # use Azure RBAC, not legacy access policies
   soft_delete_retention_days = var.soft_delete_retention_days
   purge_protection_enabled   = var.purge_protection_enabled # true recommended in production
 
@@ -172,8 +173,8 @@ resource "azurerm_public_ip" "vault" {
   name                = "${var.cluster_name}-vault-pip"
   location            = var.location
   resource_group_name = var.resource_group_name
-  allocation_method   = "Static"    # static ensures the IP doesn't change on stop/start
-  sku                 = "Standard"  # Standard SKU required for zone redundancy and NSG association
+  allocation_method   = "Static"   # static ensures the IP doesn't change on stop/start
+  sku                 = "Standard" # Standard SKU required for zone redundancy and NSG association
   tags                = merge(local.common_tags, { Name = "${var.cluster_name}-vault-pip" })
 }
 
@@ -234,6 +235,9 @@ resource "azurerm_linux_virtual_machine" "vault" {
     key_vault_key_name         = local.key_vault_key_name
     managed_identity_client_id = azurerm_user_assigned_identity.vault.client_id
     vault_api_addr             = azurerm_public_ip.vault.ip_address
+    vault_use_custom_tls       = local.custom_tls_enabled ? "true" : "false"
+    vault_tls_cert_pem_b64     = local.custom_tls_enabled ? base64encode(var.vault_tls_cert_pem) : ""
+    vault_tls_key_pem_b64      = local.custom_tls_enabled ? base64encode(var.vault_tls_key_pem) : ""
   }))
 
   os_disk {
@@ -253,4 +257,14 @@ resource "azurerm_linux_virtual_machine" "vault" {
   }
 
   tags = merge(local.common_tags, { Name = "${var.cluster_name}-vault" })
+
+  lifecycle {
+    precondition {
+      condition = (
+        (var.vault_tls_cert_pem == "" && var.vault_tls_key_pem == "") ||
+        (var.vault_tls_cert_pem != "" && var.vault_tls_key_pem != "")
+      )
+      error_message = "vault_tls_cert_pem and vault_tls_key_pem must both be set together, or both left empty."
+    }
+  }
 }

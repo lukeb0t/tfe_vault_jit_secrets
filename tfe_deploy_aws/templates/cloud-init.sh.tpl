@@ -148,6 +148,29 @@ log "Compose file written to /etc/tfe/compose.yaml"
 log "Starting TFE with Docker Compose..."
 docker compose -f /etc/tfe/compose.yaml up -d
 
+# The cache volume is mounted into agent-run containers at /tmp/terraform.
+# Ensure it is world-writable so the non-root tfc-agent user can create plugin temp files.
+log "Fixing cache volume permissions for /tmp/terraform..."
+if docker ps --format '{{.Names}}' | grep -qx 'terraform-enterprise-tfe-1'; then
+  docker exec terraform-enterprise-tfe-1 sh -lc '
+    set +e
+    # TFE startup may recreate /tmp/terraform after compose starts, resetting it to 0755.
+    # Keep enforcing 01777 until the task-worker process is up and mode is stable.
+    for i in $(seq 1 90); do
+      chmod 1777 /tmp /tmp/terraform 2>/dev/null || true
+      mode="$(stat -c %a /tmp/terraform 2>/dev/null || true)"
+      tw_status="$(supervisorctl status tfe:task-worker 2>/dev/null || true)"
+      if [ "$mode" = "1777" ] && echo "$tw_status" | grep -q "RUNNING"; then
+        exit 0
+      fi
+      sleep 2
+    done
+    exit 1
+  ' || log "WARNING: failed to enforce /tmp/terraform mode 1777 in TFE container"
+else
+  log "WARNING: terraform-enterprise container not running yet; skipping chmod on /tmp/terraform"
+fi
+
 # Task-worker mounts /tmp/terraform into agent-run containers.
 # Force this mount to read-write so tfc-agent-core can create plugin temp files.
 log "Patching task-worker cache volume mount to read-write..."
@@ -178,6 +201,10 @@ if docker ps --format '{{.Names}}' | grep -qx 'terraform-enterprise-tfe-1'; then
     done
     exit 0
   ' || log "WARNING: task-worker patch command failed; bootstrap continuing"
+
+  # Re-assert cache permissions after task-worker config/launch steps.
+  docker exec terraform-enterprise-tfe-1 sh -lc 'chmod 1777 /tmp /tmp/terraform' \
+    || log "WARNING: failed to re-apply chmod on /tmp/terraform after task-worker patch"
 else
   log "WARNING: terraform-enterprise container not running in time; skipping task-worker patch"
 fi

@@ -48,6 +48,11 @@ output "key_vault_root_token_secret_name" {
   value       = "vault-root-token"
 }
 
+output "key_vault_tls_cert_b64_secret_name" {
+  description = "Name of the Key Vault secret where the base64-encoded Vault TLS certificate is stored by cloud-init."
+  value       = "vault-tls-cert-b64"
+}
+
 output "vault_tls_cert_host_path" {
   description = "Path on the VM host where the self-signed TLS cert is stored. Retrieve via SSH or Azure Serial Console to use as VAULT_CACERT."
   value       = "/opt/vault/certs/vault.crt"

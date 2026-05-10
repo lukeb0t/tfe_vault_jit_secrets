@@ -9,6 +9,19 @@ resource_group_name = "my-resource-group"
 # Your SSH public key string (contents of ~/.ssh/id_rsa.pub or similar).
 admin_ssh_public_key = "ssh-rsa AAAA..."
 
+# Optional: provide your own Vault listener certificate and key.
+# Leave both empty to let cloud-init generate a self-signed certificate.
+# vault_tls_cert_pem = <<-PEM
+# -----BEGIN CERTIFICATE-----
+# ...
+# -----END CERTIFICATE-----
+# PEM
+# vault_tls_key_pem = <<-PEM
+# -----BEGIN PRIVATE KEY-----
+# ...
+# -----END PRIVATE KEY-----
+# PEM
+
 # vault_license is sensitive — prefer TF_VAR_vault_license env var:
 #   export TF_VAR_vault_license="<license>"
 # vault_license = "<license>"

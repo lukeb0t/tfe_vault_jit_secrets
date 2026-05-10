@@ -7,7 +7,7 @@ Terraform module that deploys a single-node **Vault Enterprise** server on AWS E
 - **Vault Enterprise** running as a Docker container (`hashicorp/vault-enterprise`)
 - **AWS KMS auto-unseal** — Vault unseals itself on every (re)start without human intervention ([docs](https://developer.hashicorp.com/vault/docs/configuration/seal/awskms))
 - **Raft integrated storage** persisted to an encrypted EBS volume
-- **Self-signed TLS** certificate (10-year validity) with the Elastic IP embedded as a Subject Alternative Name
+- **TLS certificate options** — auto-generated self-signed cert by default, or supply your own cert/key PEM
 - **Fully automated `vault operator init`** — root token and recovery keys written to SSM Parameter Store as `SecureString` parameters ([docs](https://developer.hashicorp.com/vault/docs/commands/operator/init))
 - **IMDSv2 enforced** with hop limit 2 so the Docker container can reach the EC2 instance metadata service (required for KMS credential delivery)
 - **SSM Session Manager** access baked in — no key pair or open SSH port required (key pair is optional)
@@ -81,6 +81,8 @@ The principal running Terraform needs:
 | `instance_type` | EC2 instance type. | `string` | `"m5.large"` | |
 | `key_pair_name` | Name of an existing EC2 key pair for SSH access. `null` to disable (use SSM instead). | `string` | `null` | |
 | `root_volume_size_gb` | Root EBS volume size in GiB. Raft storage shares this volume. | `number` | `50` | |
+| `vault_tls_cert_pem` | Optional PEM-encoded TLS cert for Vault listener (`""` = generate self-signed cert). | `string` | `""` | |
+| `vault_tls_key_pem` | Optional PEM-encoded private key for `vault_tls_cert_pem` (`""` = generate self-signed key). | `string` | `""` | |
 | `vault_ingress_cidr_blocks` | CIDRs allowed to reach Vault on port 8200. | `list(string)` | `["0.0.0.0/0"]` | |
 | `ssh_ingress_cidr_blocks` | CIDRs allowed to SSH on port 22. Set to `[]` to disable. | `list(string)` | `[]` | |
 | `kms_key_deletion_window_days` | Days before KMS key is permanently deleted after `terraform destroy` (7–30). | `number` | `30` | |
@@ -127,7 +129,7 @@ After successful cloud-init, the following `SecureString` parameters are created
 2. Query EC2 instance metadata (IMDSv2) for private IP and EIP
 3. Create directory layout: `/opt/vault/{data,config,certs}`
 4. Set ownership `100:1000` (Vault container UID/GID) on all Vault directories
-5. Generate a 10-year self-signed TLS certificate with EIP as SAN
+5. Prepare TLS cert/key (user-provided PEM inputs, or generate a 10-year self-signed cert with EIP as SAN)
 6. Write `vault.hcl` with Raft storage, KMS seal, TLS, and `api_addr`
 7. Start Vault container with `--user 100:1000 --entrypoint /bin/vault` (bypasses entrypoint script — see note below)
 8. Poll `/v1/sys/health` until Vault responds (up to 5 minutes)

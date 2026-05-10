@@ -44,3 +44,19 @@ variable "key_pair_name" {
   type    = string
   default = null
 }
+
+variable "vault_tls_cert_pem" {
+  # Optional PEM-encoded TLS certificate for Vault listener.
+  # Leave empty to let the module generate a self-signed cert.
+  type      = string
+  sensitive = true
+  default   = ""
+}
+
+variable "vault_tls_key_pem" {
+  # Optional PEM-encoded private key for vault_tls_cert_pem.
+  # Leave empty to let the module generate a self-signed key.
+  type      = string
+  sensitive = true
+  default   = ""
+}
