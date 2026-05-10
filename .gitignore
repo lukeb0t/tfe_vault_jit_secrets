@@ -11,6 +11,7 @@ tfplan
 # Variable files with secrets — use terraform.tfvars.example as the template
 terraform.tfvars
 *.auto.tfvars
+*.tfvars
 
 # Crash logs
 crash.log
