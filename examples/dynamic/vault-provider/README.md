@@ -18,7 +18,7 @@ without storing long-lived credentials.
 
 ## Prerequisites
 
-- A running Vault instance (see `examples/aws/infra/` or `examples/azure/infra/`)
+- A running Vault instance (deploy one via [`vault_enterprise_dev`](https://github.com/lukeb0t/vault_enterprise_dev), or bring your own)
 - A running TFE instance with an organization and organization token
 - The `dynamic_vault_secrets` module available in the parent repo
 
@@ -34,25 +34,25 @@ terraform apply
 
 ### Retrieving credentials
 
-**AWS** (Vault deployed via `examples/aws/infra/`):
+**AWS-hosted Vault** (deployed via `vault_enterprise_dev/vault_deploy_aws`):
 ```bash
 vault_root_token=$(aws ssm get-parameter \
-  --name /vault/root_token --with-decryption \
+  --name /vault/<cluster_name>/root_token --with-decryption \
   --query Parameter.Value --output text)
 
 vault_ca_cert_b64=$(aws ssm get-parameter \
-  --name /vault/ca_cert_b64 --with-decryption \
+  --name /vault/<cluster_name>/tls_cert_b64 \
   --query Parameter.Value --output text)
 ```
 
-**Azure** (Vault deployed via `examples/azure/infra/`):
+**Azure-hosted Vault** (deployed via `vault_enterprise_dev/vault_deploy_azure`):
 ```bash
 vault_root_token=$(az keyvault secret show \
   --vault-name <kv-name> --name vault-root-token \
   --query value -o tsv)
 
 vault_ca_cert_b64=$(az keyvault secret show \
-  --vault-name <kv-name> --name vault-ca-cert-b64 \
+  --vault-name <kv-name> --name vault-tls-cert-b64 \
   --query value -o tsv)
 ```
 

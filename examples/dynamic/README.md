@@ -14,34 +14,32 @@ Each sub-directory is a self-contained Terraform configuration for one use case:
 
 ## Prerequisites
 
-- A running Vault instance (see [`examples/aws/infra/`](../aws/infra/) or [`examples/azure/infra/`](../azure/infra/))
+- A running Vault instance (deploy one via [`vault_enterprise_dev`](https://github.com/lukeb0t/vault_enterprise_dev), or bring your own)
 - A running TFE or HCP Terraform instance with an organization and API token
 - The Vault root token and base64-encoded TLS certificate available
 
 ### Retrieve Vault credentials
 
-**AWS-hosted Vault:**
+**AWS-hosted Vault** (deployed via `vault_enterprise_dev/vault_deploy_aws`):
 ```bash
-cd examples/aws/infra
 vault_root_token=$(aws ssm get-parameter \
-  --name "$(terraform output -raw vault_root_token_ssm_path)" \
+  --name /vault/<cluster_name>/root_token \
   --with-decryption --query Parameter.Value --output text)
 vault_ca_cert_b64=$(aws ssm get-parameter \
-  --name "$(terraform output -raw vault_tls_cert_b64_ssm_path)" \
+  --name /vault/<cluster_name>/tls_cert_b64 \
   --query Parameter.Value --output text)
-vault_addr=$(terraform output -raw vault_addr)
+vault_addr="https://<vault-public-ip>:8200"
 ```
 
-**Azure-hosted Vault:**
+**Azure-hosted Vault** (deployed via `vault_enterprise_dev/vault_deploy_azure`):
 ```bash
-cd examples/azure/infra
 vault_root_token=$(az keyvault secret show \
-  --vault-name "$(terraform output -raw key_vault_name)" \
+  --vault-name <key-vault-name> \
   --name vault-root-token --query value -o tsv)
 vault_ca_cert_b64=$(az keyvault secret show \
-  --vault-name "$(terraform output -raw key_vault_name)" \
+  --vault-name <key-vault-name> \
   --name vault-tls-cert-b64 --query value -o tsv)
-vault_addr=$(terraform output -raw vault_addr)
+vault_addr="https://<vault-public-ip>:8200"
 ```
 
 ---

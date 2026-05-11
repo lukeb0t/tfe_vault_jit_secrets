@@ -18,8 +18,8 @@ into the target workspace automatically — no static IAM keys stored anywhere.
 
 ## Prerequisites
 
-- A running Vault instance (see `examples/aws/infra/`)
-  - Vault must be deployed in AWS with an IAM role that can `sts:AssumeRole`
+- A running Vault instance deployed in AWS with an IAM role that can `sts:AssumeRole`
+  (deploy one via [`vault_enterprise_dev/examples/aws/infra`](https://github.com/lukeb0t/vault_enterprise_dev/tree/main/examples/aws/infra), or bring your own)
 - A running TFE instance with an organization and organization token
 - An IAM role for Vault to assume-role into (the `dynamic_aws_provider_secrets` module creates this)
 
@@ -35,18 +35,18 @@ terraform apply
 
 ### Retrieving Vault credentials
 
-**AWS** (Vault deployed via `examples/aws/infra/`):
+**AWS** (Vault deployed via `vault_enterprise_dev/examples/aws/infra`):
 ```bash
 vault_root_token=$(aws ssm get-parameter \
-  --name /vault/root_token --with-decryption \
+  --name /vault/<cluster_name>/root_token --with-decryption \
   --query Parameter.Value --output text)
 
 vault_ca_cert_b64=$(aws ssm get-parameter \
-  --name /vault/ca_cert_b64 --with-decryption \
+  --name /vault/<cluster_name>/tls_cert_b64 \
   --query Parameter.Value --output text)
 
-# Vault instance profile ARN (from infra outputs):
-vault_iam_principal_arn=$(terraform -chdir=../../aws/infra output -raw vault_iam_role_arn)
+# Vault IAM role ARN (from vault_enterprise_dev infra outputs):
+vault_iam_principal_arn=$(terraform -chdir=<path-to-vault_enterprise_dev>/examples/aws/infra output -raw vault_iam_role_arn)
 ```
 
 ## Test workspace

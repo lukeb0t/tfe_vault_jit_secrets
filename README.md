@@ -23,10 +23,6 @@ tfe_vault_jit_secrets/
 ├── dynamic_aws_provider_secrets/  # TFE → jwt-aws-provider   → Vault token → AWS STS creds
 │
 └── examples/
-    ├── aws/
-    │   └── infra/     # Deploy vault_deploy_aws (from vault_enterprise_dev)
-    ├── azure/
-    │   └── infra/     # Deploy vault_deploy_azure (from vault_enterprise_dev)
     └── dynamic/
         ├── vault-provider/  # Use Case A: JWT → Vault token → Vault Terraform provider
         └── aws-creds/       # Use Case B: JWT → Vault → AWS STS credentials
@@ -45,7 +41,7 @@ Vault deployment is handled by the [`vault_enterprise_dev`](https://github.com/l
 | [`vault_deploy_aws`](https://github.com/lukeb0t/vault_enterprise_dev/tree/main/vault_deploy_aws) | AWS | EC2 · KMS auto-unseal · SSM secret storage · IAM instance profile |
 | [`vault_deploy_azure`](https://github.com/lukeb0t/vault_enterprise_dev/tree/main/vault_deploy_azure) | Azure | Linux VM · Azure Key Vault auto-unseal · Managed Identity |
 
-The `examples/aws/infra/` and `examples/azure/infra/` directories in this repo source those modules directly from GitHub and provide a ready-to-use deployment configuration.
+The `examples/dynamic/` directory in this repo provides ready-to-use configurations for both use cases. Refer to [`vault_enterprise_dev`](https://github.com/lukeb0t/vault_enterprise_dev) to deploy Vault first.
 
 > **Bring your own Vault:** You can skip this step entirely if you already have a running Vault instance. The dynamic-secrets modules in Step 2 only require a reachable Vault address and a token with sufficient permissions — they are not tied to any specific deployment method.
 
