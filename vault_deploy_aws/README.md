@@ -9,7 +9,7 @@ Terraform module that deploys a single-node **Vault Enterprise** server on AWS E
 - **Raft integrated storage** persisted to an encrypted EBS volume
 - **TLS certificate options** — auto-generated self-signed cert by default, or supply your own cert/key PEM
 - **Fully automated `vault operator init`** — root token and recovery keys written to SSM Parameter Store as `SecureString` parameters ([docs](https://developer.hashicorp.com/vault/docs/commands/operator/init))
-- **Barebones dev mode** — disables KMS auto-unseal and SSM bootstrap storage, then writes a single-share Shamir init file locally for SSH retrieval
+- **Barebones dev mode** — disables KMS auto-unseal, IAM, and SSM bootstrap storage, then writes a single-share Shamir init file locally for SSH retrieval
 - **IMDSv2 enforced** with hop limit 2 so the Docker container can reach the EC2 instance metadata service (required for KMS credential delivery)
 - **SSM Session Manager** access baked in — no key pair or open SSH port required (key pair is optional)
 
@@ -84,7 +84,7 @@ The principal running Terraform needs:
 | `subnet_cidr` | CIDR block for a module-managed public subnet. Used only when `vpc_id = null`. | `string` | `"10.100.1.0/24"` | |
 | `vault_version` | Docker image tag for `hashicorp/vault-enterprise` (e.g. `2.0.0-ent`). | `string` | `"2.0.0-ent"` | |
 | `instance_type` | EC2 instance type. | `string` | `"m5.large"` | |
-| `barebones_dev_mode` | Disable KMS auto-unseal and SSM bootstrap storage; use local Shamir bootstrap files instead. | `bool` | `false` | |
+| `barebones_dev_mode` | Disable KMS auto-unseal, IAM, and SSM bootstrap storage; use local Shamir bootstrap files instead. | `bool` | `false` | |
 | `key_pair_name` | Name of an existing EC2 key pair for SSH access. Required when `barebones_dev_mode = true`. | `string` | `null` | |
 | `root_volume_size_gb` | Root EBS volume size in GiB. Raft storage shares this volume. | `number` | `50` | |
 | `vault_tls_cert_pem` | Optional PEM-encoded TLS cert for Vault listener (`""` = generate self-signed cert). | `string` | `""` | |
@@ -103,7 +103,7 @@ The principal running Terraform needs:
 | `vault_public_ip` | Elastic IP address assigned to the Vault server. |
 | `instance_id` | EC2 instance ID. |
 | `security_group_id` | Security group ID. |
-| `iam_role_arn` | ARN of the IAM role attached to the EC2 instance. Pass this to `dynamic_aws_provider_secrets` as `vault_iam_user_arn`. |
+| `iam_role_arn` | ARN of the IAM role attached to the EC2 instance (null in barebones mode). Pass this to `dynamic_aws_provider_secrets` as `vault_iam_user_arn`. |
 | `kms_key_id` | KMS key ID used for auto-unseal. |
 | `kms_key_arn` | KMS key ARN used for auto-unseal. |
 | `ssm_prefix` | SSM Parameter Store path prefix (`/vault/<cluster_name>`). |
@@ -130,7 +130,7 @@ After successful cloud-init, the following `SecureString` parameters are created
 
 > **Note:** With KMS auto-unseal, `vault operator init` produces **recovery keys** (not unseal keys). These are used to regenerate a root token if the original is lost. See the [Vault recovery key documentation](https://developer.hashicorp.com/vault/docs/concepts/seal#recovery-key).
 
-In `barebones_dev_mode`, no SSM parameters are written. Instead, cloud-init writes `/opt/vault/bootstrap/init.json` with the root token and single Shamir unseal key.
+In `barebones_dev_mode`, no IAM role/profile is attached and no SSM parameters are written. Instead, cloud-init writes `/opt/vault/bootstrap/init.json` with the root token and single Shamir unseal key.
 
 ## Cloud-init bootstrap sequence
 

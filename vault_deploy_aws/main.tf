@@ -134,14 +134,12 @@ resource "aws_kms_alias" "vault" {
 }
 
 # ─── IAM Role for EC2 Instance Profile ──────────────────────────────────────
-# The Vault EC2 instance uses this role for:
-#   1. KMS auto-unseal (kms_unseal policy below)
-#   2. Storing init secrets in SSM (ssm_init policy below)
-#   3. SSM Session Manager access for operator troubleshooting
-# When used with dynamic_aws_provider_secrets, this role also needs sts:AssumeRole
-# rights on the target IAM role — managed by that module's trust policy.
+# Barebones mode skips IAM entirely. These resources only exist when Vault needs
+# KMS auto-unseal, SSM bootstrap storage, or SSM Session Manager access.
 
 resource "aws_iam_role" "vault" {
+  count = local.barebones_enabled ? 0 : 1
+
   name        = "${var.cluster_name}-vault-server"
   description = "Vault EC2 instance role - KMS unseal + SSM init storage"
 
@@ -162,8 +160,10 @@ resource "aws_iam_role" "vault" {
 }
 
 resource "aws_iam_instance_profile" "vault" {
+  count = local.barebones_enabled ? 0 : 1
+
   name = "${var.cluster_name}-vault-server"
-  role = aws_iam_role.vault.name
+  role = aws_iam_role.vault[0].name
   tags = local.common_tags
 }
 
@@ -173,7 +173,7 @@ resource "aws_iam_role_policy" "vault_kms_unseal" {
   count = local.kms_enabled ? 1 : 0
 
   name = "kms-auto-unseal"
-  role = aws_iam_role.vault.id
+  role = aws_iam_role.vault[0].id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -201,7 +201,7 @@ resource "aws_iam_role_policy" "vault_ssm_init" {
   count = local.barebones_enabled ? 0 : 1
 
   name = "ssm-init-secrets"
-  role = aws_iam_role.vault.id
+  role = aws_iam_role.vault[0].id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -224,7 +224,9 @@ resource "aws_iam_role_policy" "vault_ssm_init" {
 # Attaches the AWS-managed policy that enables SSM Session Manager.
 # This allows interactive shell sessions without an open SSH port or key pair.
 resource "aws_iam_role_policy_attachment" "vault_ssm_session_manager" {
-  role       = aws_iam_role.vault.name
+  count = local.barebones_enabled ? 0 : 1
+
+  role       = aws_iam_role.vault[0].name
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
 
@@ -295,7 +297,7 @@ resource "aws_instance" "vault" {
   instance_type          = var.instance_type
   subnet_id              = local.subnet_id_resolved
   vpc_security_group_ids = [aws_security_group.vault.id]
-  iam_instance_profile   = aws_iam_instance_profile.vault.name
+  iam_instance_profile   = local.barebones_enabled ? null : aws_iam_instance_profile.vault[0].name
   key_name               = var.key_pair_name # null = no key pair; use SSM Session Manager
 
   # Any change to a template variable (version, license, KMS key, etc.) replaces
@@ -321,9 +323,9 @@ resource "aws_instance" "vault" {
     http_endpoint = "enabled"
     http_tokens   = "required" # enforce IMDSv2; rejects unauthenticated metadata requests
 
-    # Hop limit 2 allows the Vault Docker container to reach IMDS for IAM credentials
-    # (default 1 blocks containers; needed for KMS auto-unseal).
-    http_put_response_hop_limit = 2
+    # Barebones mode never needs container IMDS access; otherwise the Vault
+    # container needs hop limit 2 to reach IMDS for AWS IAM credentials.
+    http_put_response_hop_limit = local.barebones_enabled ? 1 : 2
   }
 
   root_block_device {

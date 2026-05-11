@@ -56,6 +56,7 @@ Both modules:
 - Run Vault Enterprise as a Docker container (`hashicorp/vault-enterprise`)
 - Use Raft integrated storage
 - TLS is enabled by default through an auto-generated, self-signed certificate. Both Vault modules also support BYO Cert/Key. See docs.
+- Barebones dev mode is available in `vault_deploy_aws` for SSH-based bootstrap retrieval without KMS, IAM, or SSM bootstrap storage.
 - Run `vault operator init` automatically via cloud-init and store the root token + recovery keys securely
 - Support BYOVPC / BYOVNET via optional `vpc_id`/`subnet_id` (AWS) or `vnet_id`/`subnet_id` (Azure) inputs
 

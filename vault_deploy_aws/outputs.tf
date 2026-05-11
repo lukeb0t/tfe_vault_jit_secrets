@@ -20,7 +20,7 @@ output "security_group_id" {
 
 output "iam_role_arn" {
   description = "ARN of the IAM role attached to the Vault EC2 instance."
-  value       = aws_iam_role.vault.arn
+  value       = var.barebones_dev_mode ? null : aws_iam_role.vault[0].arn
 }
 
 output "kms_key_id" {
