@@ -3,7 +3,7 @@
 # To use an existing VNet, pass vnet_id and subnet_id to the module.
 
 module "vault" {
-  source = "../../vault_deploy_azure"
+  source = "github.com/lukeb0t/vault_enterprise_dev//vault_deploy_azure"
 
   cluster_name         = var.cluster_name
   vault_version        = var.vault_version

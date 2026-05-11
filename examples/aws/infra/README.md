@@ -2,6 +2,8 @@
 
 Creates a self-contained Vault Enterprise cluster on EC2 with its own VPC, KMS auto-unseal, and SSM-backed secret storage.
 
+> **Module source:** [`vault_enterprise_dev//vault_deploy_aws`](https://github.com/lukeb0t/vault_enterprise_dev/tree/main/vault_deploy_aws) — sourced directly from GitHub.
+
 ---
 
 ## Modes

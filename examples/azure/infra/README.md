@@ -2,6 +2,8 @@
 
 Deploys a self-contained Vault Enterprise cluster on an Azure Linux VM with its own VNet, Azure Key Vault auto-unseal, and Key Vault-backed secret storage.
 
+> **Module source:** [`vault_enterprise_dev//vault_deploy_azure`](https://github.com/lukeb0t/vault_enterprise_dev/tree/main/vault_deploy_azure) — sourced directly from GitHub.
+
 ---
 
 ## Modes

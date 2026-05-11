@@ -1,6 +1,8 @@
 # tfe_vault_jit_secrets
 
-Terraform modules for deploying **HashiCorp Vault Enterprise** — on **AWS or Azure** — and configuring **just-in-time (JIT) dynamic secrets** for Terraform Enterprise (TFE) workloads. No long-lived credentials required.
+Terraform modules for configuring **just-in-time (JIT) dynamic secrets** for Terraform Enterprise (TFE) workloads using HashiCorp Vault. No long-lived credentials required.
+
+> **Vault deployment is handled separately.** Use [`vault_enterprise_dev`](https://github.com/lukeb0t/vault_enterprise_dev) to deploy a Vault Enterprise instance on AWS or Azure before applying the modules in this repo.
 
 This repo implements two HashiCorp validated patterns:
 
@@ -16,19 +18,15 @@ This repo implements two HashiCorp validated patterns:
 ```
 tfe_vault_jit_secrets/
 │
-│  ── Deploy infrastructure ──
-├── vault_deploy_aws/       # Vault Enterprise on AWS   (EC2 + VPC + KMS + SSM)
-├── vault_deploy_azure/     # Vault Enterprise on Azure (VM + VNet + Azure Key Vault)
-│
 │  ── Configure dynamic credential flows ──
 ├── dynamic_vault_secrets/         # TFE → jwt-vault-provider → Vault token → Vault provider
 ├── dynamic_aws_provider_secrets/  # TFE → jwt-aws-provider   → Vault token → AWS STS creds
 │
 └── examples/
     ├── aws/
-    │   └── infra/     # Deploy vault_deploy_aws
+    │   └── infra/     # Deploy vault_deploy_aws (from vault_enterprise_dev)
     ├── azure/
-    │   └── infra/     # Deploy vault_deploy_azure
+    │   └── infra/     # Deploy vault_deploy_azure (from vault_enterprise_dev)
     └── dynamic/
         ├── vault-provider/  # Use Case A: JWT → Vault token → Vault Terraform provider
         └── aws-creds/       # Use Case B: JWT → Vault → AWS STS credentials
@@ -40,28 +38,14 @@ tfe_vault_jit_secrets/
 
 ### Step 1 — Deploy Vault (choose AWS or Azure)
 
-`vault_deploy_aws` and `vault_deploy_azure` are **equivalent, interchangeable modules**. Both deploy an identical single-node Vault Enterprise cluster; only the underlying cloud primitives differ. Pick the one that matches your environment.
+Vault deployment is handled by the [`vault_enterprise_dev`](https://github.com/lukeb0t/vault_enterprise_dev) repo, which contains two equivalent modules:
 
-| | `vault_deploy_aws` | `vault_deploy_azure` |
-|---|---|---|
-| **Compute** | EC2 (Amazon Linux 2023) | Linux VM (Ubuntu 22.04 LTS) |
-| **Auto-unseal** | AWS KMS Customer Managed Key | Azure Key Vault RSA key |
-| **Secret storage** | SSM Parameter Store (SecureString) | Azure Key Vault Secret |
-| **Identity** | IAM Instance Profile | User-Assigned Managed Identity |
-| **Networking** | VPC + subnet (auto or BYOVPC) | VNet + subnet (auto or BYOVNET) |
-| **Public IP** | Elastic IP (pre-allocated) | Static Standard-SKU Public IP (pre-allocated) |
-| **Bootstrap** | cloud-init via `user_data` | cloud-init via `custom_data` |
-| **Vault config** | `seal "awskms"` | `seal "azurekeyvault"` |
-| **Root token retrieval** | `aws ssm get-parameter ...` | `az keyvault secret show ...` |
+| Module | Cloud | Key features |
+|--------|-------|-------------|
+| [`vault_deploy_aws`](https://github.com/lukeb0t/vault_enterprise_dev/tree/main/vault_deploy_aws) | AWS | EC2 · KMS auto-unseal · SSM secret storage · IAM instance profile |
+| [`vault_deploy_azure`](https://github.com/lukeb0t/vault_enterprise_dev/tree/main/vault_deploy_azure) | Azure | Linux VM · Azure Key Vault auto-unseal · Managed Identity |
 
-Both modules:
-- Run Vault Enterprise as a Docker container (`hashicorp/vault-enterprise`)
-- Use Raft integrated storage
-- TLS is enabled by default through an auto-generated, self-signed certificate. Both Vault modules also support BYO Cert/Key. See docs.
-- Barebones dev mode is available in `vault_deploy_aws` for SSH-based bootstrap retrieval without KMS, IAM, or SSM bootstrap storage.
-- Barebones dev mode is available in `vault_deploy_azure` for SSH-based bootstrap retrieval without Key Vault auto-unseal or Key Vault bootstrap secret storage.
-- Run `vault operator init` automatically via cloud-init and, in default mode, store bootstrap secrets in cloud-native secret storage
-- Support BYOVPC / BYOVNET via optional `vpc_id`/`subnet_id` (AWS) or `vnet_id`/`subnet_id` (Azure) inputs
+The `examples/aws/infra/` and `examples/azure/infra/` directories in this repo source those modules directly from GitHub and provide a ready-to-use deployment configuration.
 
 ### Step 2 — Configure TFE dynamic secrets (cloud-agnostic)
 
@@ -151,47 +135,9 @@ See [`dynamic_vault_secrets`](./dynamic_vault_secrets/README.md) and [`dynamic_a
 
 ## Modules
 
-### [`vault_deploy_aws`](./vault_deploy_aws/) — Deploy Vault on AWS
+> **Vault deployment modules** (`vault_deploy_aws`, `vault_deploy_azure`) have moved to [`vault_enterprise_dev`](https://github.com/lukeb0t/vault_enterprise_dev).
 
-Self-contained AWS deployment. Creates its own VPC and networking by default.
-
-| Input | Description | Default |
-|---|---|---|
-| `cluster_name` | Name prefix for all resources | required |
-| `vault_version` | Docker image tag | `"2.0.0-ent"` |
-| `vault_license` | Enterprise license (sensitive) | required |
-| `vpc_id` | Existing VPC (`null` = module creates one) | `null` |
-| `subnet_id` | Existing subnet (required when `vpc_id` set) | `null` |
-| `key_pair_name` | EC2 key pair for SSH access | `null` |
-
-Key outputs: `vault_addr`, `vault_public_ip`, `ssm_root_token_path`, `ssm_tls_cert_b64_path`, `iam_role_arn`
-
-→ See [`vault_deploy_aws/README.md`](./vault_deploy_aws/README.md) for full input/output reference.
-
----
-
-### [`vault_deploy_azure`](./vault_deploy_azure/) — Deploy Vault on Azure
-
-Self-contained Azure deployment. Creates its own VNet and networking by default.
-
-| Input | Description | Default |
-|---|---|---|
-| `cluster_name` | Name prefix for all resources | required |
-| `vault_version` | Docker image tag | `"2.0.0-ent"` |
-| `vault_license` | Enterprise license (sensitive) | required |
-| `location` | Azure region | required |
-| `resource_group_name` | Existing Resource Group | required |
-| `admin_ssh_public_key` | SSH public key for `azureuser` | required |
-| `vnet_id` | Existing VNet (`null` = module creates one) | `null` |
-| `subnet_id` | Existing subnet (required when `vnet_id` set) | `null` |
-
-Key outputs: `vault_addr`, `vault_public_ip`, `key_vault_name`, `key_vault_uri`
-
-→ See [`vault_deploy_azure/README.md`](./vault_deploy_azure/README.md) for full input/output reference.
-
----
-
-### [`dynamic_vault_secrets`](./dynamic_vault_secrets/) — Use Case A: TFE Vault Provider Credentials
+### [`dynamic_vault_secrets`](./dynamic_vault_secrets/)
 
 Configures Vault JWT auth to trust TFE workload identity tokens. Workspaces receive a short-lived Vault token without managing any static credential.
 
@@ -213,10 +159,15 @@ Extends Use Case A: Vault exchanges the TFE JWT for short-lived AWS STS credenti
 
 ## Quick Start
 
+### Step 1 — Deploy Vault
+
+Clone [`vault_enterprise_dev`](https://github.com/lukeb0t/vault_enterprise_dev) and deploy the module for your cloud:
+
 ### Option A — Vault on AWS
 
 ```bash
-cd examples/aws/infra
+git clone https://github.com/lukeb0t/vault_enterprise_dev.git
+cd vault_enterprise_dev/vault_deploy_aws
 cp terraform.tfvars.example terraform.tfvars
 # Edit terraform.tfvars: set region, cluster_name, and vault_license
 export TF_VAR_vault_license="<your Vault license>"
@@ -235,7 +186,7 @@ aws ssm get-parameter \
 ### Option B — Vault on Azure
 
 ```bash
-cd examples/azure
+cd ../vault_deploy_azure
 cp terraform.tfvars.example terraform.tfvars
 # Edit terraform.tfvars: set vault_license, location, resource_group_name, admin_ssh_public_key
 export TF_VAR_vault_license="<your license>"
