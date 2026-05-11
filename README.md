@@ -55,7 +55,7 @@ tfe_vault_jit_secrets/
 Both modules:
 - Run Vault Enterprise as a Docker container (`hashicorp/vault-enterprise`)
 - Use Raft integrated storage
-- Support TLS certificate options: provide your own PEM-encoded cert/key via `vault_tls_cert_pem` and `vault_tls_key_pem`, or auto-generate a self-signed certificate (4096-bit RSA, 10-year) with the public IP as a SAN
+- TLS is enabled by defaul through an auto-generated, self-signed certificate. Both Vault modules also support BYO Cert/Key. See docs.
 - Run `vault operator init` automatically via cloud-init and store the root token + recovery keys securely
 - Support BYOVPC / BYOVNET via optional `vpc_id`/`subnet_id` (AWS) or `vnet_id`/`subnet_id` (Azure) inputs
 
