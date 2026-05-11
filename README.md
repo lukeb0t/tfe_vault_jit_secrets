@@ -21,14 +21,17 @@ tfe_vault_jit_secrets/
 ├── vault_deploy_azure/     # Vault Enterprise on Azure (VM + VNet + Azure Key Vault)
 │
 │  ── Configure dynamic credential flows ──
-├── dynamic_vault_secrets/  # TFE → jwt-vault-provider → Vault token → Vault provider
+├── dynamic_vault_secrets/         # TFE → jwt-vault-provider → Vault token → Vault provider
 ├── dynamic_aws_provider_secrets/  # TFE → jwt-aws-provider   → Vault token → AWS STS creds
 │
 └── examples/
     ├── aws/
-    │   ├── infra/          # Deploys vault_deploy_aws
-    │   └── dynamic/        # Configures both dynamic flows + test workspaces
-    └── azure/              # Minimal root module calling vault_deploy_azure
+    │   └── infra/     # Deploy vault_deploy_aws
+    ├── azure/
+    │   └── infra/     # Deploy vault_deploy_azure
+    └── dynamic/
+        ├── vault-provider/  # Use Case A: JWT → Vault token → Vault Terraform provider
+        └── aws-creds/       # Use Case B: JWT → Vault → AWS STS credentials
 ```
 
 ---
@@ -258,18 +261,28 @@ az keyvault secret show \
 | `tfe_org_name` | Organization name in TFE/HCP Terraform |
 | `tfe_org_token` | TFE org-level API token (Settings → API Tokens) |
 
-For the end-to-end AWS example, apply `examples/aws/dynamic` after `examples/aws/infra` is ready. Use the `infra/` outputs to supply the Vault root token, Vault TLS cert (`vault_tls_cert_b64_ssm_path`), Vault IAM role ARN, and the TFE values above.
+`examples/dynamic/` is **cloud-agnostic** — it works with Vault deployed on AWS or Azure. Each sub-directory targets a single use case:
+
+| Use Case | Directory |
+|----------|-----------|
+| JWT → Vault token (Vault Terraform provider) | [`examples/dynamic/vault-provider/`](./examples/dynamic/vault-provider/) |
+| JWT → AWS STS credentials (via Vault AWS secrets engine) | [`examples/dynamic/aws-creds/`](./examples/dynamic/aws-creds/) |
 
 ```bash
-cd ../dynamic
+# Use Case A — Vault provider credentials
+cd examples/dynamic/vault-provider
 cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars: set tfe_hostname, tfe_org_name, tfe_org_token, vault_addr, etc.
+# Set vault_addr, vault_root_token, vault_ca_cert_b64, tfe_hostname, tfe_org_token, tfe_org_name
+terraform init && terraform apply
+
+# Use Case B — Vault-backed AWS dynamic credentials
+cd examples/dynamic/aws-creds
+cp terraform.tfvars.example terraform.tfvars
+# Set vault_addr, vault_root_token, vault_ca_cert_b64, vault_iam_principal_arn, tfe_hostname, tfe_org_token, tfe_org_name
 terraform init && terraform apply
 ```
 
-This configuration creates the `vault-kv-test` and `aws-creds-test` workspaces, uploads their test configs with a temporary TFE team token, and leaves runs unqueued. Trigger the runs manually from the TFE UI.
-
-If Vault is deployed on Azure, the two dynamic modules are still cloud-agnostic — consume `dynamic_vault_secrets` and `dynamic_aws_provider_secrets` from your own root module once you have `vault_addr`, a Vault bootstrap token, and your TFE connection details.
+Each apply creates a dedicated test workspace and uploads its test config. Trigger runs manually from the TFE UI.
 
 ---
 

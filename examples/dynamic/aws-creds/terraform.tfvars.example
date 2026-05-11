@@ -1,0 +1,35 @@
+# ─── Vault Connection ────────────────────────────────────────────────────────
+vault_addr       = "https://vault.example.com:8200"
+
+# Retrieve from AWS SSM:
+#   aws ssm get-parameter --name /vault/root_token --with-decryption --query Parameter.Value --output text
+# Retrieve from Azure Key Vault:
+#   az keyvault secret show --vault-name <kv-name> --name vault-root-token --query value -o tsv
+vault_root_token = ""
+
+# Retrieve from AWS SSM:
+#   aws ssm get-parameter --name /vault/ca_cert_b64 --with-decryption --query Parameter.Value --output text
+# Retrieve from Azure Key Vault:
+#   az keyvault secret show --vault-name <kv-name> --name vault-ca-cert-b64 --query value -o tsv
+# Leave empty if Vault uses a publicly-trusted certificate.
+vault_ca_cert_b64 = ""
+
+# ─── AWS Configuration ───────────────────────────────────────────────────────
+aws_region = "us-east-1"
+
+# ARN of the IAM principal the Vault server authenticates as (its instance role
+# or the IAM user whose access keys are provided below).
+vault_iam_principal_arn = "arn:aws:iam::123456789012:role/vault-server-role"
+
+# Optional: provide static IAM credentials if Vault doesn't have an instance
+# role. Leave empty to rely on the instance profile.
+vault_aws_access_key_id     = ""
+vault_aws_secret_access_key = ""
+
+# ─── TFE / TFC Connection ────────────────────────────────────────────────────
+tfe_hostname  = "app.terraform.io"   # or your self-hosted TFE hostname
+tfe_org_name  = "my-org"
+tfe_org_token = ""                   # TFE organization API token
+
+# Leave empty if TFE uses a publicly-trusted certificate.
+tfe_ca_cert_pem = ""

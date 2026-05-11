@@ -2,10 +2,6 @@ terraform {
   required_version = ">= 1.3"
 
   required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
-    }
     vault = {
       source  = "hashicorp/vault"
       version = "~> 4.0"
@@ -21,18 +17,14 @@ terraform {
   }
 }
 
-provider "aws" {
-  region = var.region
-}
-
 provider "vault" {
   address         = var.vault_addr
-  token           = local.vault_root_token_effective
-  skip_tls_verify = true  # self-signed cert from vault_deploy_aws module
+  token           = var.vault_root_token
+  skip_tls_verify = true # self-signed cert; set VAULT_CACERT or provide vault_ca_cert_b64 instead
 }
 
 provider "tfe" {
   hostname        = var.tfe_hostname
   token           = var.tfe_org_token
-  ssl_skip_verify = true  # self-signed cert from tfe_deploy_aws module
+  ssl_skip_verify = true # set to false if TFE uses a publicly-trusted cert
 }
