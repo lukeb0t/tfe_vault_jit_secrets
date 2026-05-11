@@ -62,6 +62,8 @@ Both modules:
 
 ### Step 2 — Configure TFE dynamic secrets (cloud-agnostic)
 
+> **📋 Prerequisite:** The `dynamic_vault_secrets` and `dynamic_aws_provider_secrets` modules require a running **Terraform Enterprise (or HCP Terraform)** instance. You will need a TFE hostname, an organization, and an API token before applying either module. The `tfe_deploy_aws` module that was previously in this repo has been moved to a separate repository — deploy it (or use an existing TFE/HCP Terraform org) before proceeding with this step.
+
 Once Vault is running, the two dynamic-secrets modules work identically regardless of which cloud Vault is deployed on. They require:
 - Vault server address and token (bootstrap credentials)
 - TFE hostname and organization/workspace information
