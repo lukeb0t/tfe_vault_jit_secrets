@@ -74,6 +74,8 @@ resource "vault_jwt_auth_backend_role" "tfe_workspace" {
   role_name = var.vault_role_name
   role_type = "jwt"
 
+  # bound_audiences enforces the 'aud' (audience) claim in the JWT matches this value.
+  # This prevents a TFE workspace from authenticating to the wrong Vault backend.
   # vault.workload.identity is the default audience TFE uses; override with
   # TFC_VAULT_WORKLOAD_IDENTITY_AUDIENCE in the workspace if you change this.
   bound_audiences   = [var.workload_identity_audience]
@@ -89,6 +91,8 @@ resource "vault_jwt_auth_backend_role" "tfe_workspace" {
   # giving each workspace a unique identity in Vault audit logs.
   user_claim = "terraform_full_workspace"
 
+  # Token issued to TFE for this role is valid for token_ttl_seconds (default: 1200s = 20 min).
+  # TFE renews this token periodically during plan/apply runs.
   token_policies = [vault_policy.tfe_workspace.name]
   token_ttl      = var.token_ttl_seconds
 }
@@ -110,12 +114,16 @@ resource "vault_mount" "kv" {
 # TFE workspace so any run can exchange its workload-identity JWT for a
 # Vault token via the jwt-vault-provider backend.
 #
+# These variables are used by the Terraform Vault provider running inside TFE:
+#
 #   TFC_VAULT_PROVIDER_AUTH  = "true"
 #   TFC_VAULT_ADDR           = <vault_addr>
 #   TFC_VAULT_AUTH_PATH      = <jwt_backend_path>  (default: jwt-vault-provider)
 #   TFC_VAULT_RUN_ROLE       = <vault_role_name>
 #   TFC_VAULT_NAMESPACE      = <vault_namespace>   (omitted for root namespace)
-#   TFC_VAULT_ENCODED_CACERT = <base64 PEM>        (omitted when not provided)
+#   TFC_VAULT_ENCODED_CACERT = <base64 PEM>        (required for TLS validation)
+#
+# Reference: https://developer.hashicorp.com/terraform/cloud-docs/dynamic-provider-credentials/vault-configuration
 
 resource "tfe_variable" "vault_provider_auth" {
   workspace_id = var.tfe_workspace_id
@@ -166,5 +174,12 @@ resource "tfe_variable" "vault_encoded_cacert" {
   value        = var.vault_ca_cert_b64
   category     = "env"
   sensitive    = true
-  description  = "Base64-encoded Vault CA cert — required for self-signed TLS"
+  # TFC_VAULT_ENCODED_CACERT is required for the Terraform Vault provider running
+  # in TFE to validate Vault's TLS certificate. This is base64-encoded (not a file
+  # path) because TFE doesn't expose the filesystem to workspace runs. The provider
+  # automatically decodes and uses this during:
+  # 1. OIDC discovery to fetch JWKS from Vault (token exchange)
+  # 2. Subsequent Vault API calls (reading secrets, configuring backends, etc.)
+  # Required when Vault uses self-signed or non-standard CA certs.
+  description  = "Base64-encoded Vault CA cert for TLS validation"
 }

@@ -46,29 +46,32 @@ locals {
   })
 }
 
-# ─── Vault AWS Secrets Engine ────────────────────────────────────────────────
+# ─── Vault AWS Secrets Backend ───────────────────────────────────────────────
 # Vault uses this backend to call STS on behalf of TFE workspaces.
-# Provide access_key/secret_key for the IAM principal Vault authenticates as.
-# If Vault happens to run on EC2 in the same AWS account, these can be omitted
-# and Vault will fall back to the instance profile — but that is not required.
+# If access_key/secret_key are provided, Vault uses them to authenticate to STS.
+# If omitted and Vault runs on EC2 with an IAM role in the target AWS account,
+# Vault falls back to the instance profile.
 
 resource "vault_aws_secret_backend" "aws" {
   path        = var.aws_secrets_backend_path
   description = "AWS secrets engine — vault-backed dynamic credentials for TFE"
   region      = var.aws_secrets_backend_region
 
+  # These credentials are what Vault uses to call STS (as vault_iam_user_arn).
+  # If omitted, Vault falls back to EC2 instance profile (if running on EC2).
   access_key = var.vault_aws_access_key_id != "" ? var.vault_aws_access_key_id : null
   secret_key = var.vault_aws_secret_access_key != "" ? var.vault_aws_secret_access_key : null
 
   default_lease_ttl_seconds = var.default_sts_ttl_seconds
   max_lease_ttl_seconds     = var.max_sts_ttl_seconds
 }
-
-# ─── AWS Secrets Engine Role ─────────────────────────────────────────────────
-# Defines how Vault generates credentials for this role.
-# assumed_role: Vault calls sts:AssumeRole and returns scoped STS credentials.
-# The effective permissions = intersection of the assumed role's policies
-# and any session policy attached here.
+# ─── Vault AWS Secrets Engine Role ───────────────────────────────────────────
+# This role tells Vault:
+#   1. Which IAM role to assume (role_arns = Vault target role)
+#   2. How to assume it (credential_type = assumed_role via STS)
+#   3. TTL constraints for STS credentials generated via this role
+# When TFE requests credentials, Vault assumes vault_target and returns STS creds
+# with the effective permissions = intersection of the assumed role's policies.
 
 resource "vault_aws_secret_backend_role" "tfe" {
   backend         = vault_aws_secret_backend.aws.path
@@ -133,6 +136,9 @@ resource "vault_jwt_auth_backend" "tfe" {
 }
 
 # ─── JWT Auth Role ───────────────────────────────────────────────────────────
+# This role controls what Vault token is issued to TFE when it presents a valid JWT.
+# The token is valid for token_ttl_seconds (default: 1200s = 20 min) and has permissions
+# defined by the token_policies (AWS secrets engine access).
 
 resource "vault_jwt_auth_backend_role" "tfe" {
   # Use the path from the backend resource if it was created, otherwise use the variable directly.
@@ -140,6 +146,8 @@ resource "vault_jwt_auth_backend_role" "tfe" {
   role_name = var.vault_role_name
   role_type = "jwt"
 
+  # bound_audiences enforces the 'aud' (audience) claim in the JWT.
+  # This isolates the AWS module from other JWT backends (e.g., vault.workload.identity.kv).
   bound_audiences   = [var.workload_identity_audience]
   bound_claims_type = "glob" # enables wildcard matching for org/project/workspace
 
@@ -148,8 +156,10 @@ resource "vault_jwt_auth_backend_role" "tfe" {
     sub = "organization:${var.tfe_organization}:project:${var.tfe_project}:workspace:${var.tfe_workspace}:run_phase:*"
   }
 
-  user_claim = "terraform_full_workspace" # unique per workspace — appears in Vault audit logs
+  # terraform_full_workspace provides audit trail — appears in Vault audit logs as the authenticated entity.
+  user_claim = "terraform_full_workspace"
 
+  # token_policies controls what the issued token can do (e.g., read from AWS secrets engine).
   token_policies = [vault_policy.tfe_backed_aws.name]
   token_ttl      = var.token_ttl_seconds
 }
@@ -299,5 +309,10 @@ resource "tfe_variable" "vault_encoded_cacert" {
   value        = var.vault_ca_cert_b64
   category     = "env"
   sensitive    = true
-  description  = "Base64-encoded Vault CA cert (self-signed TLS)"
+  # TFC_VAULT_ENCODED_CACERT is required for the Terraform provider running in TFE
+  # to validate Vault's TLS certificate during OIDC discovery and API calls.
+  # This is base64-encoded (not a file path) because TFE doesn't expose the filesystem.
+  # The Vault provider automatically decodes and uses this for TLS validation.
+  # Required when Vault uses self-signed or non-standard CA certificates.
+  description  = "Base64-encoded Vault CA cert for TLS validation"
 }
