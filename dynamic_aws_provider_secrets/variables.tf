@@ -160,10 +160,9 @@ variable "tfe_workspace_id" {
 }
 
 variable "vault_ca_cert_b64" {
-  description = "Base64-encoded PEM CA certificate for Vault. Injected as TFC_VAULT_ENCODED_CACERT when non-empty for self-signed Vault TLS."
+  description = "Base64-encoded PEM CA certificate for Vault. Injected as TFC_VAULT_ENCODED_CACERT. Required for TFC to verify Vault's TLS certificate (including self-signed certs from vault_deploy modules)."
   type        = string
   sensitive   = true
-  default     = ""
 }
 
 variable "set_vault_auth_vars" {

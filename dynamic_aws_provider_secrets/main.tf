@@ -292,8 +292,7 @@ resource "tfe_variable" "vault_backed_aws_auth_type" {
 }
 
 resource "tfe_variable" "vault_encoded_cacert" {
-  # Only inject when a CA cert is provided and not delegated to dynamic_vault_secrets.
-  count = var.set_vault_auth_vars && var.vault_ca_cert_b64 != "" ? 1 : 0
+  count = var.set_vault_auth_vars ? 1 : 0
 
   workspace_id = var.tfe_workspace_id
   key          = "TFC_VAULT_ENCODED_CACERT"

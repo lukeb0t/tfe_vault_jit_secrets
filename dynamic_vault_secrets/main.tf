@@ -161,9 +161,6 @@ resource "tfe_variable" "vault_auth_path" {
 }
 
 resource "tfe_variable" "vault_encoded_cacert" {
-  # Only inject the CA cert when one is provided — omit for public CA-signed certs.
-  count = var.vault_ca_cert_b64 != "" ? 1 : 0
-
   workspace_id = var.tfe_workspace_id
   key          = "TFC_VAULT_ENCODED_CACERT"
   value        = var.vault_ca_cert_b64
