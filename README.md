@@ -18,7 +18,6 @@ tfe_vault_jit_secrets/
 │
 │  ── Deploy infrastructure ──
 ├── vault_deploy_aws/       # Vault Enterprise on AWS   (EC2 + VPC + KMS + SSM)
-├── tfe_deploy_aws/         # Terraform Enterprise on AWS (EC2 + VPC + SSM)
 ├── vault_deploy_azure/     # Vault Enterprise on Azure (VM + VNet + Azure Key Vault)
 │
 │  ── Configure dynamic credential flows ──
@@ -27,7 +26,7 @@ tfe_vault_jit_secrets/
 │
 └── examples/
     ├── aws/
-    │   ├── infra/          # Deploys vault_deploy_aws + tfe_deploy_aws
+    │   ├── infra/          # Deploys vault_deploy_aws
     │   └── dynamic/        # Configures both dynamic flows + test workspaces
     └── azure/              # Minimal root module calling vault_deploy_azure
 ```
@@ -166,27 +165,6 @@ Key outputs: `vault_addr`, `vault_public_ip`, `ssm_root_token_path`, `ssm_tls_ce
 
 ---
 
-### [`tfe_deploy_aws`](./tfe_deploy_aws/) — Deploy Terraform Enterprise on AWS
-
-Deploys a single Terraform Enterprise Flexible Deployment Options instance on AWS using Docker Compose, self-signed TLS, and `nip.io`. Use `create_networking = false` to join the VPC created by `vault_deploy_aws`.
-
-| Input | Description | Default |
-|---|---|---|
-| `cluster_name` | Name prefix for all resources | required |
-| `tfe_version` | TFE Docker image tag | `"v202505-1"` |
-| `tfe_license` | Terraform Enterprise license (sensitive) | required |
-| `admin_email` | Initial admin email | required |
-| `admin_password` | Initial admin password (sensitive) | required |
-| `org_name` | Bootstrap organization name | `"hashicorp-demo"` |
-| `create_networking` | Create a VPC/subnet inside the module | `true` |
-| `vpc_id` / `subnet_id` | Existing network to reuse when `create_networking = false` | `null` |
-
-Key outputs: `tfe_url`, `tfe_hostname`, `ssm_admin_token_path`, `ssm_org_token_path`, `vpc_id`, `subnet_id`
-
-→ See [`tfe_deploy_aws/README.md`](./tfe_deploy_aws/README.md) for full input/output reference.
-
----
-
 ### [`vault_deploy_azure`](./vault_deploy_azure/) — Deploy Vault on Azure
 
 Self-contained Azure deployment. Creates its own VNet and networking by default.
@@ -235,7 +213,7 @@ Extends Use Case A: Vault exchanges the TFE JWT for short-lived AWS STS credenti
 ```bash
 cd examples/aws/infra
 cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars: set region, cluster_name, tfe_license, admin_email, and admin_password
+# Edit terraform.tfvars: set region, cluster_name, and vault_license
 export TF_VAR_vault_license="<your Vault license>"
 terraform init && terraform apply
 ```
