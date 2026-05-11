@@ -62,7 +62,7 @@ Both modules:
 
 ### Step 2 — Configure TFE dynamic secrets (cloud-agnostic)
 
-> **📋 Prerequisite:** The `dynamic_vault_secrets` and `dynamic_aws_provider_secrets` modules require a running **Terraform Enterprise (or HCP Terraform)** instance. You will need a TFE hostname, an organization, and an API token before applying either module. The `tfe_deploy_aws` module that was previously in this repo has been moved to a separate repository — deploy it (or use an existing TFE/HCP Terraform org) before proceeding with this step.
+> **📋 Prerequisite:** The `dynamic_vault_secrets` and `dynamic_aws_provider_secrets` modules require a running **Terraform Enterprise (or HCP Terraform)** instance. You will need a TFE hostname, an organization, and an API token before applying either module.
 
 Once Vault is running, the two dynamic-secrets modules work identically regardless of which cloud Vault is deployed on. They require:
 - Vault server address and token (bootstrap credentials)
@@ -250,10 +250,20 @@ az keyvault secret show \
 
 ### Step 2 — Configure TFE dynamic secrets
 
-For the end-to-end AWS example, apply `examples/aws/dynamic` after `examples/aws/infra` is ready. Use the `infra/` outputs to supply the Vault root token, Vault TLS cert (`vault_tls_cert_b64_ssm_path`), Vault IAM role ARN, TFE hostname, and TFE org token.
+**Bring your own TFE server.** You need a running Terraform Enterprise or HCP Terraform instance before applying the dynamic modules. Have the following ready:
+
+| Value | Where to find it |
+|---|---|
+| `tfe_hostname` | Your TFE FQDN, e.g. `tfe.example.com` or `app.terraform.io` |
+| `tfe_org_name` | Organization name in TFE/HCP Terraform |
+| `tfe_org_token` | TFE org-level API token (Settings → API Tokens) |
+
+For the end-to-end AWS example, apply `examples/aws/dynamic` after `examples/aws/infra` is ready. Use the `infra/` outputs to supply the Vault root token, Vault TLS cert (`vault_tls_cert_b64_ssm_path`), Vault IAM role ARN, and the TFE values above.
 
 ```bash
 cd ../dynamic
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars: set tfe_hostname, tfe_org_name, tfe_org_token, vault_addr, etc.
 terraform init && terraform apply
 ```
 
@@ -273,6 +283,7 @@ If Vault is deployed on Azure, the two dynamic modules are still cloud-agnostic 
 | Vault Enterprise license | required | required |
 | Pre-existing network | optional (module creates VPC) | optional (module creates VNet) |
 | SSH key pair | optional (`key_pair_name`) | required (`admin_ssh_public_key`) |
+| TFE / HCP Terraform instance | required for dynamic modules | required for dynamic modules |
 
 ---
 
