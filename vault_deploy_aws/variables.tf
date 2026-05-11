@@ -70,7 +70,7 @@ variable "barebones_dev_mode" {
 variable "instance_type" {
   description = "EC2 instance type for the Vault server."
   type        = string
-  default     = "m5.large" # 2 vCPU / 8 GB — adequate for single-node POC
+  default     = "m5.medium" # 1 vCPU / 4 GB — lower-cost default for single-node POC
 }
 
 variable "key_pair_name" {
@@ -97,6 +97,12 @@ variable "vault_tls_key_pem" {
   type        = string
   sensitive   = true
   default     = ""
+}
+
+variable "tls_disable_client_certs" {
+  description = "Whether Vault should disable client certificate requests on the HTTPS listener."
+  type        = bool
+  default     = true
 }
 
 # ─── KMS ───────────────────────────────────────────────────────────────────

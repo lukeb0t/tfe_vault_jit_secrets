@@ -6,7 +6,8 @@
 # Template variables injected by Terraform's templatefile():
 #   cluster_name, vault_version, vault_license, tenant_id,
 #   key_vault_name, key_vault_key_name, managed_identity_client_id,
-#   vault_api_addr, vault_use_custom_tls, vault_tls_cert_pem_b64, vault_tls_key_pem_b64
+#   vault_api_addr, vault_use_custom_tls, vault_tls_cert_pem_b64, vault_tls_key_pem_b64,
+#   barebones_dev_mode, bootstrap_dir
 #
 # Key differences from vault_deploy_aws/templates/cloud-init.sh.tpl:
 #   - apt-get / docker.io  instead of dnf / docker
@@ -38,6 +39,8 @@ PUBLIC_IP="${vault_api_addr}"
 USE_CUSTOM_TLS="${vault_use_custom_tls}"
 CUSTOM_TLS_CERT_B64="${vault_tls_cert_pem_b64}"
 CUSTOM_TLS_KEY_B64="${vault_tls_key_pem_b64}"
+BAREBONES_DEV_MODE="${barebones_dev_mode}"
+BOOTSTRAP_DIR="${bootstrap_dir}"
 
 # ─── 1. Wait for Ubuntu's unattended-upgrades dpkg lock ──────────────────────
 # Ubuntu cloud VMs run unattended-upgrades on first boot, which holds the dpkg
@@ -72,8 +75,10 @@ log "Private IP: $PRIVATE_IP  |  Public IP (static): $PUBLIC_IP"
 # All bind-mounted paths must be owned by 100:1000 before the container starts.
 log "Creating Vault directory layout..."
 mkdir -p /opt/vault/{config,data,certs,logs}
+mkdir -p "$BOOTSTRAP_DIR"
 chown -R 100:1000 /opt/vault/data /opt/vault/certs
 chmod 755 /opt/vault/{config,data,certs,logs}
+chmod 700 "$BOOTSTRAP_DIR"
 
 # ─── 5. Prepare TLS certificate ──────────────────────────────────────────────
 if [ "$USE_CUSTOM_TLS" = "true" ]; then
@@ -147,6 +152,7 @@ listener "tcp" {
   tls_cert_file   = "/vault/certs/vault.crt"
   tls_key_file    = "/vault/certs/vault.key"
   tls_min_version = "tls12"
+  tls_disable_client_certs = ${tls_disable_client_certs}
 }
 
 # Integrated storage (Raft) — single-node, data persisted on the OS disk.
@@ -154,6 +160,11 @@ storage "raft" {
   path    = "/vault/data"
   node_id = "vault-node-1"
 }
+
+VAULTCFG
+
+if [ "$BAREBONES_DEV_MODE" != "true" ]; then
+cat >> /opt/vault/config/vault.hcl <<VAULTCFG
 
 # Azure Key Vault seal — wraps Vault's master key so the cluster unseals
 # automatically on start without operator intervention.
@@ -166,6 +177,7 @@ seal "azurekeyvault" {
   client_id  = "$MI_CLIENT_ID"
 }
 VAULTCFG
+fi
 
 chown 100:1000 /opt/vault/config/vault.hcl
 log "Vault configuration written."
@@ -236,69 +248,103 @@ done
 INIT_STATUS=$(curl -sk "https://127.0.0.1:8200/v1/sys/init" | jq -r '.initialized')
 
 if [ "$INIT_STATUS" = "false" ]; then
-  log "Vault not yet initialized — running 'vault operator init'..."
+  if [ "$BAREBONES_DEV_MODE" = "true" ]; then
+    log "Vault not yet initialized — running Shamir init with one key share..."
 
-  # With Azure Key Vault auto-unseal, init produces recovery keys (not unseal keys).
-  # Vault automatically unseals using the Azure Key Vault key after init.
-  INIT_JSON=$(docker exec \
-    -e VAULT_ADDR="https://127.0.0.1:8200" \
-    -e VAULT_SKIP_VERIFY="true" \
-    vault \
-    vault operator init \
-      -recovery-shares=5 \
-      -recovery-threshold=3 \
-      -format=json)
+    INIT_JSON=$(docker exec \
+      -e VAULT_ADDR="https://127.0.0.1:8200" \
+      -e VAULT_SKIP_VERIFY="true" \
+      vault \
+      vault operator init \
+        -key-shares=1 \
+        -key-threshold=1 \
+        -format=json)
 
-  ROOT_TOKEN=$(echo "$INIT_JSON" | jq -r '.root_token')
+    UNSEAL_KEY=$(echo "$INIT_JSON" | jq -r '.unseal_keys_b64[0]')
 
-  # ─── 11. Store secrets in Azure Key Vault ──────────────────────────────────
-  # Obtain an OAuth2 access token for the Key Vault API using the managed
-  # identity attached to this VM. The client_id parameter selects the specific
-  # user-assigned identity (a VM can have multiple assigned identities).
-  log "Fetching Azure Key Vault access token via IMDS..."
-  AKV_TOKEN=$(curl -sf \
-    -H "Metadata: true" \
-    "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https%3A%2F%2Fvault.azure.net&client_id=$MI_CLIENT_ID" \
-    | jq -r '.access_token')
+    log "Writing bootstrap credentials to $BOOTSTRAP_DIR/init.json"
+    printf '%s\n' "$INIT_JSON" > "$BOOTSTRAP_DIR/init.json"
+    chmod 600 "$BOOTSTRAP_DIR/init.json"
 
-  KV_BASE="https://$KV_NAME.vault.azure.net/secrets"
-  API_VER="?api-version=7.3"
+    log "Unsealing Vault with the single Shamir key..."
+    docker exec \
+      -e VAULT_ADDR="https://127.0.0.1:8200" \
+      -e VAULT_SKIP_VERIFY="true" \
+      vault \
+      vault operator unseal "$UNSEAL_KEY" >/dev/null
 
-  # Helper: write a single secret to Azure Key Vault via the REST API.
-  # Equivalent to 'aws ssm put-parameter --type SecureString' in the AWS module.
-  store_secret() {
-    local name="$1"
-    local value="$2"
-    curl -sf -X PUT "$KV_BASE/$name$API_VER" \
-      -H "Authorization: Bearer $AKV_TOKEN" \
-      -H "Content-Type: application/json" \
-      -d "{\"value\": \"$value\"}" > /dev/null
-    log "  stored secret: $name"
-  }
+    unset UNSEAL_KEY INIT_JSON
 
-  # Store the base64-encoded TLS certificate to mirror the AWS module's
-  # /tls_cert_b64 artifact used by downstream modules.
-  TLS_CERT_B64=$(base64 -w0 /opt/vault/certs/vault.crt)
-  store_secret "vault-tls-cert-b64" "$TLS_CERT_B64"
+    log "=== Vault initialized. Bootstrap file stored at $BOOTSTRAP_DIR/init.json ==="
+  else
+    log "Vault not yet initialized — running 'vault operator init'..."
 
-  store_secret "vault-root-token" "$ROOT_TOKEN"
+    # With Azure Key Vault auto-unseal, init produces recovery keys (not unseal keys).
+    # Vault automatically unseals using the Azure Key Vault key after init.
+    INIT_JSON=$(docker exec \
+      -e VAULT_ADDR="https://127.0.0.1:8200" \
+      -e VAULT_SKIP_VERIFY="true" \
+      vault \
+      vault operator init \
+        -recovery-shares=5 \
+        -recovery-threshold=3 \
+        -format=json)
 
-  # Store all five recovery keys.
-  for i in 0 1 2 3 4; do
-    KEY=$(echo "$INIT_JSON" | jq -r ".recovery_keys_b64[$i] // empty")
-    [ -z "$KEY" ] && continue
-    store_secret "vault-recovery-key-$((i + 1))" "$KEY"
-  done
+    ROOT_TOKEN=$(echo "$INIT_JSON" | jq -r '.root_token')
 
-  # Clear sensitive values from shell memory.
-  unset ROOT_TOKEN INIT_JSON AKV_TOKEN TLS_CERT_B64
+    # ─── 11. Store secrets in Azure Key Vault ────────────────────────────────
+    # Obtain an OAuth2 access token for the Key Vault API using the managed
+    # identity attached to this VM. The client_id parameter selects the specific
+    # user-assigned identity (a VM can have multiple assigned identities).
+    log "Fetching Azure Key Vault access token via IMDS..."
+    AKV_TOKEN=$(curl -sf \
+      -H "Metadata: true" \
+      "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https%3A%2F%2Fvault.azure.net&client_id=$MI_CLIENT_ID" \
+      | jq -r '.access_token')
 
-  log "=== Vault initialized. Secrets stored in Azure Key Vault '$KV_NAME'. ==="
+    KV_BASE="https://$KV_NAME.vault.azure.net/secrets"
+    API_VER="?api-version=7.3"
+
+    # Helper: write a single secret to Azure Key Vault via the REST API.
+    # Equivalent to 'aws ssm put-parameter --type SecureString' in the AWS module.
+    store_secret() {
+      local name="$1"
+      local value="$2"
+      curl -sf -X PUT "$KV_BASE/$name$API_VER" \
+        -H "Authorization: Bearer $AKV_TOKEN" \
+        -H "Content-Type: application/json" \
+        -d "{\"value\": \"$value\"}" > /dev/null
+      log "  stored secret: $name"
+    }
+
+    # Store the base64-encoded TLS certificate to mirror the AWS module's
+    # /tls_cert_b64 artifact used by downstream modules.
+    TLS_CERT_B64=$(base64 -w0 /opt/vault/certs/vault.crt)
+    store_secret "vault-tls-cert-b64" "$TLS_CERT_B64"
+
+    store_secret "vault-root-token" "$ROOT_TOKEN"
+
+    # Store all five recovery keys.
+    for i in 0 1 2 3 4; do
+      KEY=$(echo "$INIT_JSON" | jq -r ".recovery_keys_b64[$i] // empty")
+      [ -z "$KEY" ] && continue
+      store_secret "vault-recovery-key-$((i + 1))" "$KEY"
+    done
+
+    # Clear sensitive values from shell memory.
+    unset ROOT_TOKEN INIT_JSON AKV_TOKEN TLS_CERT_B64
+
+    log "=== Vault initialized. Secrets stored in Azure Key Vault '$KV_NAME'. ==="
+  fi
 else
   log "Vault already initialized — skipping init."
 fi
 
 log "=== Vault cloud-init complete ==="
 log "    UI        : https://$PUBLIC_IP:8200/ui"
-log "    Root token: az keyvault secret show --vault-name $KV_NAME --name vault-root-token --query value -o tsv"
-log "    TLS cert  : /opt/vault/certs/vault.crt  (copy to client as VAULT_CACERT)"
+if [ "$BAREBONES_DEV_MODE" = "true" ]; then
+  log "    Bootstrap : sudo cat $BOOTSTRAP_DIR/init.json"
+else
+  log "    Root token: az keyvault secret show --vault-name $KV_NAME --name vault-root-token --query value -o tsv"
+  log "    TLS cert  : /opt/vault/certs/vault.crt  (copy to client as VAULT_CACERT)"
+fi

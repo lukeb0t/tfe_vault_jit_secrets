@@ -72,10 +72,16 @@ variable "ssh_ingress_cidr_blocks" {
 
 # ─── VM ──────────────────────────────────────────────────────────────────────
 
+variable "barebones_dev_mode" {
+  description = "When true, disable Key Vault auto-unseal and Key Vault secret storage, then use Shamir unseal with one key share and write bootstrap credentials locally to /opt/vault/bootstrap/init.json."
+  type        = bool
+  default     = false
+}
+
 variable "vm_size" {
   description = "Azure VM size for the Vault server."
   type        = string
-  default     = "Standard_D2s_v3" # 2 vCPU / 8 GiB — equivalent to AWS m5.large
+  default     = "Standard_B2s" # 2 vCPU / 4 GiB — lower-cost default for single-node POC
 }
 
 variable "admin_ssh_public_key" {
@@ -97,6 +103,12 @@ variable "vault_tls_key_pem" {
   default     = ""
 }
 
+variable "tls_disable_client_certs" {
+  description = "Whether Vault should disable client certificate requests on the HTTPS listener."
+  type        = bool
+  default     = true
+}
+
 variable "os_disk_size_gb" {
   description = "Size in GiB of the OS disk. Vault Raft storage shares this disk."
   type        = number
@@ -109,7 +121,7 @@ variable "os_disk_size_gb" {
 #   - Root token storage (AWS: SSM Parameter Store SecureString)
 
 variable "key_vault_name" {
-  description = "Override for the Azure Key Vault name. If null, defaults to '<cluster_name>-kv' (truncated to 24 chars). Must be globally unique across Azure."
+  description = "Override for the Azure Key Vault name. If null, defaults to '<cluster_name>-kv' (truncated to 24 chars). Must be globally unique across Azure. Ignored when barebones_dev_mode is true."
   type        = string
   default     = null
 }

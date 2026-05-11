@@ -15,42 +15,47 @@ output "vm_id" {
 
 output "managed_identity_id" {
   description = "Azure resource ID of the user-assigned managed identity attached to the VM."
-  value       = azurerm_user_assigned_identity.vault.id
+  value       = var.barebones_dev_mode ? null : azurerm_user_assigned_identity.vault[0].id
 }
 
 output "managed_identity_principal_id" {
   description = "Object (principal) ID of the managed identity — use when granting it additional RBAC roles."
-  value       = azurerm_user_assigned_identity.vault.principal_id
+  value       = var.barebones_dev_mode ? null : azurerm_user_assigned_identity.vault[0].principal_id
 }
 
 output "managed_identity_client_id" {
   description = "Client ID of the user-assigned managed identity."
-  value       = azurerm_user_assigned_identity.vault.client_id
+  value       = var.barebones_dev_mode ? null : azurerm_user_assigned_identity.vault[0].client_id
 }
 
 output "key_vault_id" {
   description = "Azure resource ID of the Key Vault used for auto-unseal and secret storage."
-  value       = azurerm_key_vault.vault.id
+  value       = var.barebones_dev_mode ? null : azurerm_key_vault.vault[0].id
 }
 
 output "key_vault_uri" {
   description = "URI of the Azure Key Vault (e.g. https://<name>.vault.azure.net/)."
-  value       = azurerm_key_vault.vault.vault_uri
+  value       = var.barebones_dev_mode ? null : azurerm_key_vault.vault[0].vault_uri
 }
 
 output "key_vault_name" {
   description = "Name of the Azure Key Vault."
-  value       = local.key_vault_name
+  value       = var.barebones_dev_mode ? null : local.key_vault_name
 }
 
 output "key_vault_root_token_secret_name" {
   description = "Name of the Key Vault secret where the Vault root token is stored by cloud-init."
-  value       = "vault-root-token"
+  value       = var.barebones_dev_mode ? null : "vault-root-token"
 }
 
 output "key_vault_tls_cert_b64_secret_name" {
   description = "Name of the Key Vault secret where the base64-encoded Vault TLS certificate is stored by cloud-init."
-  value       = "vault-tls-cert-b64"
+  value       = var.barebones_dev_mode ? null : "vault-tls-cert-b64"
+}
+
+output "barebones_bootstrap_file" {
+  description = "Local host path of the init JSON file containing the root token and unseal key when barebones_dev_mode is enabled."
+  value       = var.barebones_dev_mode ? "/opt/vault/bootstrap/init.json" : null
 }
 
 output "vault_tls_cert_host_path" {

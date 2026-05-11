@@ -8,6 +8,7 @@ module "vault" {
   cluster_name         = var.cluster_name
   vault_version        = var.vault_version
   vault_license        = var.vault_license
+  barebones_dev_mode   = var.barebones_dev_mode
   location             = var.location
   resource_group_name  = var.resource_group_name
   admin_ssh_public_key = var.admin_ssh_public_key

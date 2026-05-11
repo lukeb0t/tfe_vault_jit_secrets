@@ -57,7 +57,8 @@ Both modules:
 - Use Raft integrated storage
 - TLS is enabled by default through an auto-generated, self-signed certificate. Both Vault modules also support BYO Cert/Key. See docs.
 - Barebones dev mode is available in `vault_deploy_aws` for SSH-based bootstrap retrieval without KMS, IAM, or SSM bootstrap storage.
-- Run `vault operator init` automatically via cloud-init and store the root token + recovery keys securely
+- Barebones dev mode is available in `vault_deploy_azure` for SSH-based bootstrap retrieval without Key Vault auto-unseal or Key Vault bootstrap secret storage.
+- Run `vault operator init` automatically via cloud-init and, in default mode, store bootstrap secrets in cloud-native secret storage
 - Support BYOVPC / BYOVNET via optional `vpc_id`/`subnet_id` (AWS) or `vnet_id`/`subnet_id` (Azure) inputs
 
 ### Step 2 — Configure TFE dynamic secrets (cloud-agnostic)

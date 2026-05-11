@@ -32,6 +32,12 @@ variable "admin_ssh_public_key" {
   type        = string
 }
 
+variable "barebones_dev_mode" {
+  description = "When true, use local Shamir bootstrap mode and skip Key Vault auto-unseal + secret storage."
+  type        = bool
+  default     = false
+}
+
 variable "vault_tls_cert_pem" {
   description = "Optional PEM-encoded TLS certificate for Vault listener. Leave empty to auto-generate self-signed cert."
   type        = string

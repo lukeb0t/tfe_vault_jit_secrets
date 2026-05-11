@@ -5,9 +5,15 @@ cluster_name        = "vault-poc"
 vault_version       = "2.0.0-ent"
 location            = "East US"
 resource_group_name = "my-resource-group"
+barebones_dev_mode  = false
 
 # Your SSH public key string (contents of ~/.ssh/id_rsa.pub or similar).
 admin_ssh_public_key = "ssh-rsa AAAA..."
+
+# Barebones mode writes bootstrap credentials to /opt/vault/bootstrap/init.json
+# and skips Key Vault auto-unseal + bootstrap secret storage.
+# Set true only for short-lived dev/testing environments.
+# barebones_dev_mode = true
 
 # Optional: provide your own Vault listener certificate and key.
 # Leave both empty to let cloud-init generate a self-signed certificate.

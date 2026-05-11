@@ -1,6 +1,6 @@
 # vault_deploy_azure
 
-Deploys a single-node **Vault Enterprise** cluster on an Azure Linux VM (Ubuntu 22.04 LTS) using Docker and Azure Key Vault for auto-unseal and secret storage. This module is the Azure equivalent of `vault_deploy_aws` — the two modules share the same interface and can be used interchangeably depending on the customer's target cloud.
+Deploys a single-node **Vault Enterprise** cluster on an Azure Linux VM (Ubuntu 22.04 LTS) using Docker. By default it uses Azure Key Vault for auto-unseal and secret storage, and it also supports a barebones dev mode that stores bootstrap credentials locally on the VM.
 
 ## Architecture
 
@@ -25,9 +25,9 @@ Azure Key Vault (Premium SKU)
 
 | AWS Component | Azure Equivalent |
 |---|---|
-| KMS Customer Managed Key | Azure Key Vault RSA key |
-| SSM Parameter Store (SecureString) | Azure Key Vault Secret |
-| IAM Instance Profile | User-Assigned Managed Identity |
+| KMS Customer Managed Key | Azure Key Vault RSA key (default mode) |
+| SSM Parameter Store (SecureString) | Azure Key Vault Secret (default mode) |
+| IAM Instance Profile | User-Assigned Managed Identity (default mode) |
 | `seal "awskms"` in vault.hcl | `seal "azurekeyvault"` in vault.hcl |
 | Elastic IP (pre-allocated) | Static Standard-SKU Public IP (pre-allocated) |
 | AWS IMDSv2 | Azure IMDS (no token exchange required) |
@@ -78,6 +78,8 @@ vault status
 | `location` | Azure region (e.g. `"East US"`, `"West Europe"`) | `string` | — | yes |
 | `resource_group_name` | Existing Resource Group to deploy into | `string` | — | yes |
 | `admin_ssh_public_key` | SSH public key for `azureuser` (required by Azure even when SSH stays closed) | `string` | — | yes |
+| `barebones_dev_mode` | Disable Key Vault auto-unseal and Key Vault secret storage; use local Shamir bootstrap file instead | `bool` | `false` | no |
+| `tls_disable_client_certs` | Disable TLS client-certificate requests on the Vault HTTPS listener | `bool` | `true` | no |
 | `vault_tls_cert_pem` | Optional PEM-encoded TLS cert for Vault listener (`""` = generate self-signed cert) | `string` | `""` | no |
 | `vault_tls_key_pem` | Optional PEM-encoded private key for `vault_tls_cert_pem` (`""` = generate self-signed key) | `string` | `""` | no |
 | `vnet_id` | Existing VNet resource ID (`null` = module creates VNet) | `string` | `null` | no |
@@ -86,7 +88,7 @@ vault status
 | `subnet_cidr` | Address prefix for module-managed subnet | `string` | `"10.100.1.0/24"` | no |
 | `vault_ingress_cidr_blocks` | CIDRs allowed inbound on port 8200 | `list(string)` | `["0.0.0.0/0"]` | no |
 | `ssh_ingress_cidr_blocks` | CIDRs allowed inbound on port 22 (empty = no SSH rule) | `list(string)` | `[]` | no |
-| `vm_size` | Azure VM size | `string` | `"Standard_D2s_v3"` | no |
+| `vm_size` | Azure VM size | `string` | `"Standard_B2s"` | no |
 | `os_disk_size_gb` | OS disk size in GiB (Raft storage shares this disk) | `number` | `50` | no |
 | `key_vault_name` | Override Key Vault name (≤ 24 chars, globally unique; `null` = auto-derived) | `string` | `null` | no |
 | `soft_delete_retention_days` | Soft-delete retention in days (7–90) | `number` | `7` | no |
@@ -108,6 +110,7 @@ vault status
 | `key_vault_name` | Azure Key Vault name |
 | `key_vault_root_token_secret_name` | Secret name containing the root token (`vault-root-token`) |
 | `key_vault_tls_cert_b64_secret_name` | Secret name containing the base64-encoded TLS cert (`vault-tls-cert-b64`) |
+| `barebones_bootstrap_file` | Local init JSON path (`/opt/vault/bootstrap/init.json`) when barebones mode is enabled |
 | `vault_tls_cert_host_path` | VM host path to the self-signed TLS cert |
 | `vnet_id` | VNet ID used by this deployment |
 | `subnet_id` | Subnet ID used by this deployment |
@@ -161,6 +164,17 @@ az keyvault secret show \
   --name vault-tls-cert-b64 \
   --query value -o tsv
 ```
+
+## Barebones Dev Mode
+
+Set `barebones_dev_mode = true` to use a local bootstrap flow:
+
+- No Azure Key Vault resources for unseal or secret storage
+- No managed identity or Key Vault RBAC assignments
+- Shamir init with one key share (`-key-shares=1 -key-threshold=1`)
+- Root token and unseal key written to `/opt/vault/bootstrap/init.json`
+
+In barebones mode, set `ssh_ingress_cidr_blocks` so you can retrieve the local bootstrap file over SSH.
 
 ## Troubleshooting
 

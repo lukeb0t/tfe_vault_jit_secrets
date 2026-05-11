@@ -8,5 +8,5 @@ cluster_name = "vault-poc"
 vault_license = "YOUR_VAULT_ENTERPRISE_LICENSE"
 
 # Optional overrides
-instance_type = "m5.large"
+instance_type = "m5.medium"
 # key_pair_name = "my-ec2-keypair"

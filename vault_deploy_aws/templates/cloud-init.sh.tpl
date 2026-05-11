@@ -137,6 +137,7 @@ listener "tcp" {
   tls_cert_file   = "/vault/certs/vault.crt"
   tls_key_file    = "/vault/certs/vault.key"
   tls_min_version = "tls12"
+  tls_disable_client_certs = ${tls_disable_client_certs}
 }
 
 storage "raft" {

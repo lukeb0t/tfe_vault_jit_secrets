@@ -83,10 +83,11 @@ The principal running Terraform needs:
 | `vpc_cidr` | CIDR block for a module-managed VPC. Used only when `vpc_id = null`. | `string` | `"10.100.0.0/16"` | |
 | `subnet_cidr` | CIDR block for a module-managed public subnet. Used only when `vpc_id = null`. | `string` | `"10.100.1.0/24"` | |
 | `vault_version` | Docker image tag for `hashicorp/vault-enterprise` (e.g. `2.0.0-ent`). | `string` | `"2.0.0-ent"` | |
-| `instance_type` | EC2 instance type. | `string` | `"m5.large"` | |
+| `instance_type` | EC2 instance type. | `string` | `"m5.medium"` | |
 | `barebones_dev_mode` | Disable KMS auto-unseal, IAM, and SSM bootstrap storage; use local Shamir bootstrap files instead. | `bool` | `false` | |
 | `key_pair_name` | Name of an existing EC2 key pair for SSH access. Required when `barebones_dev_mode = true`. | `string` | `null` | |
 | `root_volume_size_gb` | Root EBS volume size in GiB. Raft storage shares this volume. | `number` | `50` | |
+| `tls_disable_client_certs` | Disable TLS client-certificate requests on the Vault HTTPS listener. | `bool` | `true` | |
 | `vault_tls_cert_pem` | Optional PEM-encoded TLS cert for Vault listener (`""` = generate self-signed cert). | `string` | `""` | |
 | `vault_tls_key_pem` | Optional PEM-encoded private key for `vault_tls_cert_pem` (`""` = generate self-signed key). | `string` | `""` | |
 | `vault_ingress_cidr_blocks` | CIDRs allowed to reach Vault on port 8200. | `list(string)` | `["0.0.0.0/0"]` | |

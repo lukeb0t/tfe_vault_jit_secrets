@@ -12,6 +12,9 @@ locals {
   vnet_id_resolved   = local.create_networking ? azurerm_virtual_network.vault[0].id : var.vnet_id
   subnet_id_resolved = local.create_networking ? azurerm_subnet.vault_public[0].id : var.subnet_id
   custom_tls_enabled = var.vault_tls_cert_pem != "" && var.vault_tls_key_pem != ""
+  barebones_enabled  = var.barebones_dev_mode
+  key_vault_enabled  = !local.barebones_enabled
+  bootstrap_dir      = "/opt/vault/bootstrap"
 
   common_tags = merge(
     {
@@ -48,6 +51,8 @@ resource "azurerm_subnet" "vault_public" {
 # RBAC authorization is used instead of legacy access policies (modern default).
 
 resource "azurerm_key_vault" "vault" {
+  count = local.key_vault_enabled ? 1 : 0
+
   name                       = local.key_vault_name
   location                   = var.location
   resource_group_name        = var.resource_group_name
@@ -63,25 +68,31 @@ resource "azurerm_key_vault" "vault" {
 # Grant the Terraform deployer Key Vault Administrator so it can create and
 # manage the unseal key during apply/destroy.
 resource "azurerm_role_assignment" "deployer_kv_admin" {
-  scope                = azurerm_key_vault.vault.id
+  count = local.key_vault_enabled ? 1 : 0
+
+  scope                = azurerm_key_vault.vault[0].id
   role_definition_name = "Key Vault Administrator"
   principal_id         = data.azurerm_client_config.current.object_id
 }
 
-  # Azure RBAC role assignments can take up to 30 seconds to propagate.
-  # Without this wait, the key creation immediately following will fail with 403 Forbidden.
-  resource "time_sleep" "rbac_propagation" {
-    depends_on      = [azurerm_role_assignment.deployer_kv_admin]
-    create_duration = "30s"
-  }
+# Azure RBAC role assignments can take up to 30 seconds to propagate.
+# Without this wait, the key creation immediately following will fail with 403 Forbidden.
+resource "time_sleep" "rbac_propagation" {
+  count = local.key_vault_enabled ? 1 : 0
+
+  depends_on      = [azurerm_role_assignment.deployer_kv_admin]
+  create_duration = "30s"
+}
 
 # RSA key used by Vault's azurekeyvault seal to wrap/unwrap the master key
 # on every init and unseal operation.
 resource "azurerm_key_vault_key" "vault_unseal" {
+  count = local.key_vault_enabled ? 1 : 0
+
   depends_on = [time_sleep.rbac_propagation]
 
   name         = local.key_vault_key_name
-  key_vault_id = azurerm_key_vault.vault.id
+  key_vault_id = azurerm_key_vault.vault[0].id
   key_type     = "RSA"
   key_size     = 2048
   key_opts     = ["wrapKey", "unwrapKey"] # asymmetric wrapping required for Vault auto-unseal
@@ -97,6 +108,8 @@ resource "azurerm_key_vault_key" "vault_unseal" {
 # of the VM — the identity and its RBAC assignments survive VM re-creation.
 
 resource "azurerm_user_assigned_identity" "vault" {
+  count = local.key_vault_enabled ? 1 : 0
+
   name                = "${var.cluster_name}-vault-identity"
   location            = var.location
   resource_group_name = var.resource_group_name
@@ -106,17 +119,21 @@ resource "azurerm_user_assigned_identity" "vault" {
 # Allows the managed identity to wrap/unwrap the unseal key.
 # Vault's azurekeyvault seal calls wrapKey on init and unwrapKey on every unseal.
 resource "azurerm_role_assignment" "vault_kv_crypto" {
-  scope                = azurerm_key_vault.vault.id
+  count = local.key_vault_enabled ? 1 : 0
+
+  scope                = azurerm_key_vault.vault[0].id
   role_definition_name = "Key Vault Crypto User"
-  principal_id         = azurerm_user_assigned_identity.vault.principal_id
+  principal_id         = azurerm_user_assigned_identity.vault[0].principal_id
 }
 
 # Allows the managed identity to create and read Key Vault secrets.
 # Used by cloud-init to store the root token and recovery keys after vault operator init.
 resource "azurerm_role_assignment" "vault_kv_secrets" {
-  scope                = azurerm_key_vault.vault.id
+  count = local.key_vault_enabled ? 1 : 0
+
+  scope                = azurerm_key_vault.vault[0].id
   role_definition_name = "Key Vault Secrets Officer"
-  principal_id         = azurerm_user_assigned_identity.vault.principal_id
+  principal_id         = azurerm_user_assigned_identity.vault[0].principal_id
 }
 
 # ─── Network Security Group ───────────────────────────────────────────────────
@@ -217,10 +234,13 @@ resource "azurerm_linux_virtual_machine" "vault" {
     public_key = var.admin_ssh_public_key
   }
 
-  # User-assigned managed identity for Key Vault authentication.
-  identity {
-    type         = "UserAssigned"
-    identity_ids = [azurerm_user_assigned_identity.vault.id]
+  # Key Vault mode needs a user-assigned managed identity; barebones mode skips it.
+  dynamic "identity" {
+    for_each = local.key_vault_enabled ? [1] : []
+    content {
+      type         = "UserAssigned"
+      identity_ids = [azurerm_user_assigned_identity.vault[0].id]
+    }
   }
 
   # custom_data runs the bootstrap script via cloud-init on first boot.
@@ -230,14 +250,17 @@ resource "azurerm_linux_virtual_machine" "vault" {
     cluster_name               = var.cluster_name
     vault_version              = var.vault_version
     vault_license              = var.vault_license
-    tenant_id                  = data.azurerm_client_config.current.tenant_id
-    key_vault_name             = local.key_vault_name
-    key_vault_key_name         = local.key_vault_key_name
-    managed_identity_client_id = azurerm_user_assigned_identity.vault.client_id
+    tenant_id                  = local.key_vault_enabled ? data.azurerm_client_config.current.tenant_id : ""
+    key_vault_name             = local.key_vault_enabled ? local.key_vault_name : ""
+    key_vault_key_name         = local.key_vault_enabled ? local.key_vault_key_name : ""
+    managed_identity_client_id = local.key_vault_enabled ? azurerm_user_assigned_identity.vault[0].client_id : ""
+    barebones_dev_mode         = local.barebones_enabled ? "true" : "false"
+    bootstrap_dir              = local.bootstrap_dir
     vault_api_addr             = azurerm_public_ip.vault.ip_address
     vault_use_custom_tls       = local.custom_tls_enabled ? "true" : "false"
     vault_tls_cert_pem_b64     = local.custom_tls_enabled ? base64encode(var.vault_tls_cert_pem) : ""
     vault_tls_key_pem_b64      = local.custom_tls_enabled ? base64encode(var.vault_tls_key_pem) : ""
+    tls_disable_client_certs   = var.tls_disable_client_certs ? "true" : "false"
   }))
 
   os_disk {
@@ -259,6 +282,11 @@ resource "azurerm_linux_virtual_machine" "vault" {
   tags = merge(local.common_tags, { Name = "${var.cluster_name}-vault" })
 
   lifecycle {
+    precondition {
+      condition     = !var.barebones_dev_mode || length(var.ssh_ingress_cidr_blocks) > 0
+      error_message = "barebones_dev_mode requires at least one SSH ingress CIDR block so operators can retrieve /opt/vault/bootstrap/init.json."
+    }
+
     precondition {
       condition = (
         (var.vault_tls_cert_pem == "" && var.vault_tls_key_pem == "") ||

@@ -10,7 +10,7 @@ vault_version = "1.18.3-ent"
 vpc_id    = "vpc-0123456789abcdef0"
 subnet_id = "subnet-0123456789abcdef0"
 
-instance_type       = "m5.large"
+instance_type       = "m5.medium"
 root_volume_size_gb = 50
 
 # Lock down to your corporate egress IP instead of leaving open
