@@ -47,6 +47,8 @@ Vault deployment is handled by the [`vault_enterprise_dev`](https://github.com/l
 
 The `examples/aws/infra/` and `examples/azure/infra/` directories in this repo source those modules directly from GitHub and provide a ready-to-use deployment configuration.
 
+> **Bring your own Vault:** You can skip this step entirely if you already have a running Vault instance. The dynamic-secrets modules in Step 2 only require a reachable Vault address and a token with sufficient permissions — they are not tied to any specific deployment method.
+
 ### Step 2 — Configure TFE dynamic secrets (cloud-agnostic)
 
 > **📋 Prerequisite:** The `dynamic_vault_secrets` and `dynamic_aws_provider_secrets` modules require a running **Terraform Enterprise (or HCP Terraform)** instance. You will need a TFE hostname, an organization, and an API token before applying either module.
