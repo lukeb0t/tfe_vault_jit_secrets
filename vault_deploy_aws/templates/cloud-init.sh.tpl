@@ -7,7 +7,8 @@
 # Template variables (injected by Terraform templatefile):
 #   cluster_name, vault_version, vault_license, kms_key_id,
 #   aws_region, ssm_prefix, vault_api_addr,
-#   vault_use_custom_tls, vault_tls_cert_pem_b64, vault_tls_key_pem_b64
+#   vault_use_custom_tls, vault_tls_cert_pem_b64, vault_tls_key_pem_b64,
+#   barebones_dev_mode, bootstrap_dir
 # =============================================================================
 set -euo pipefail
 
@@ -28,6 +29,8 @@ VAULT_API_ADDR="${vault_api_addr}"
 USE_CUSTOM_TLS="${vault_use_custom_tls}"
 CUSTOM_TLS_CERT_B64="${vault_tls_cert_pem_b64}"
 CUSTOM_TLS_KEY_B64="${vault_tls_key_pem_b64}"
+BAREBONES_DEV_MODE="${barebones_dev_mode}"
+BOOTSTRAP_DIR="${bootstrap_dir}"
 
 # ─── System packages ─────────────────────────────────────────────────────────
 log "Installing system packages..."
@@ -48,9 +51,11 @@ log "Private IP: $PRIVATE_IP  |  Public IP (EIP): $VAULT_API_ADDR"
 # ─── Directory layout ────────────────────────────────────────────────────────
 log "Creating Vault directory layout..."
 mkdir -p /opt/vault/{config,data,certs,logs}
+mkdir -p "$BOOTSTRAP_DIR"
 # Vault container runs as UID 100 (vault user) — all writable paths must be owned by 100:1000
 chown -R 100:1000 /opt/vault/data /opt/vault/certs
 chmod 755 /opt/vault/data /opt/vault/{config,certs,logs}
+chmod 700 "$BOOTSTRAP_DIR"
 
 # ─── TLS certificate ─────────────────────────────────────────────────────────
 if [ "$USE_CUSTOM_TLS" = "true" ]; then
@@ -100,16 +105,18 @@ chmod 640 /opt/vault/certs/vault.key   # vault user (UID 100) owns this via grou
 chown 100:1000 /opt/vault/certs/vault.crt /opt/vault/certs/vault.key
 log "TLS certificate ready at /opt/vault/certs/"
 
-log "Storing TLS certificate in SSM: $SSM_PREFIX/tls_cert_b64"
-base64 /opt/vault/certs/vault.crt > /tmp/vault_cert_b64.txt
-aws ssm put-parameter \
-  --region "$AWS_REGION" \
-  --name "$SSM_PREFIX/tls_cert_b64" \
-  --description "Vault TLS certificate (base64) — ${cluster_name}" \
-  --value "$(cat /tmp/vault_cert_b64.txt)" \
-  --type "String" \
-  --overwrite
-rm -f /tmp/vault_cert_b64.txt
+if [ "$BAREBONES_DEV_MODE" != "true" ]; then
+  log "Storing TLS certificate in SSM: $SSM_PREFIX/tls_cert_b64"
+  base64 /opt/vault/certs/vault.crt > /tmp/vault_cert_b64.txt
+  aws ssm put-parameter \
+    --region "$AWS_REGION" \
+    --name "$SSM_PREFIX/tls_cert_b64" \
+    --description "Vault TLS certificate (base64) — ${cluster_name}" \
+    --value "$(cat /tmp/vault_cert_b64.txt)" \
+    --type "String" \
+    --overwrite
+  rm -f /tmp/vault_cert_b64.txt
+fi
 
 # ─── Vault configuration ─────────────────────────────────────────────────────
 log "Writing Vault configuration..."
@@ -137,11 +144,17 @@ storage "raft" {
   node_id = "vault-node-1"
 }
 
+VAULTCFG
+
+if [ "$BAREBONES_DEV_MODE" != "true" ]; then
+cat >> /opt/vault/config/vault.hcl <<VAULTCFG
+
 seal "awskms" {
   region     = "$AWS_REGION"
   kms_key_id = "$KMS_KEY_ID"
 }
 VAULTCFG
+fi
 
 log "Vault configuration written."
 
@@ -201,52 +214,89 @@ done
 INIT_STATUS=$(curl -sk "https://127.0.0.1:8200/v1/sys/init" | jq -r '.initialized')
 
 if [ "$INIT_STATUS" = "false" ]; then
-  log "Vault is not yet initialized — running 'vault operator init'..."
+  if [ "$BAREBONES_DEV_MODE" = "true" ]; then
+    # Barebones mode keeps the init payload local and unseals with one Shamir key.
+    log "Vault is not yet initialized — running Shamir init with one key share..."
 
-  INIT_JSON=$(docker exec \
-    -e VAULT_ADDR="https://127.0.0.1:8200" \
-    -e VAULT_SKIP_VERIFY="true" \
-    vault \
-    vault operator init \
-      -recovery-shares=5 \
-      -recovery-threshold=3 \
-      -format=json)
+    INIT_JSON=$(docker exec \
+      -e VAULT_ADDR="https://127.0.0.1:8200" \
+      -e VAULT_SKIP_VERIFY="true" \
+      vault \
+      vault operator init \
+        -key-shares=1 \
+        -key-threshold=1 \
+        -format=json)
 
-  ROOT_TOKEN=$(echo "$INIT_JSON" | jq -r '.root_token')
+    ROOT_TOKEN=$(echo "$INIT_JSON" | jq -r '.root_token')
+    UNSEAL_KEY=$(echo "$INIT_JSON" | jq -r '.unseal_keys_b64[0]')
 
-  # ─── Store secrets in SSM Parameter Store ──────────────────────────────────
-  log "Storing root token in SSM: $SSM_PREFIX/root_token"
-  aws ssm put-parameter \
-    --region "$AWS_REGION" \
-    --name "$SSM_PREFIX/root_token" \
-    --description "Vault root token — ${cluster_name}" \
-    --value "$ROOT_TOKEN" \
-    --type "SecureString" \
-    --overwrite
+    log "Writing bootstrap credentials to $BOOTSTRAP_DIR/init.json"
+    printf '%s\n' "$INIT_JSON" > "$BOOTSTRAP_DIR/init.json"
+    chmod 600 "$BOOTSTRAP_DIR/init.json"
 
-  log "Storing recovery keys in SSM..."
-  for i in 0 1 2 3 4; do
-    KEY=$(echo "$INIT_JSON" | jq -r ".recovery_keys_b64[$i] // empty")
-    [ -z "$KEY" ] && continue
+    log "Unsealing Vault with the single Shamir key..."
+    docker exec \
+      -e VAULT_ADDR="https://127.0.0.1:8200" \
+      -e VAULT_SKIP_VERIFY="true" \
+      vault \
+      vault operator unseal "$UNSEAL_KEY" >/dev/null
+
+    unset ROOT_TOKEN UNSEAL_KEY INIT_JSON
+
+    log "=== Vault initialized successfully. Bootstrap file stored at $BOOTSTRAP_DIR/init.json ==="
+  else
+    # Production path stores bootstrap secrets in SSM instead of on disk.
+    log "Vault is not yet initialized — running 'vault operator init'..."
+
+    INIT_JSON=$(docker exec \
+      -e VAULT_ADDR="https://127.0.0.1:8200" \
+      -e VAULT_SKIP_VERIFY="true" \
+      vault \
+      vault operator init \
+        -recovery-shares=5 \
+        -recovery-threshold=3 \
+        -format=json)
+
+    ROOT_TOKEN=$(echo "$INIT_JSON" | jq -r '.root_token')
+
+    # ─── Store secrets in SSM Parameter Store ──────────────────────────────────
+    log "Storing root token in SSM: $SSM_PREFIX/root_token"
     aws ssm put-parameter \
       --region "$AWS_REGION" \
-      --name "$SSM_PREFIX/recovery_key_$((i + 1))" \
-      --description "Vault recovery key $((i + 1)) — ${cluster_name}" \
-      --value "$KEY" \
+      --name "$SSM_PREFIX/root_token" \
+      --description "Vault root token — ${cluster_name}" \
+      --value "$ROOT_TOKEN" \
       --type "SecureString" \
       --overwrite
-    log "  recovery_key_$((i + 1)) stored."
-  done
 
-  # Clear sensitive data from shell memory
-  unset ROOT_TOKEN INIT_JSON
+    log "Storing recovery keys in SSM..."
+    for i in 0 1 2 3 4; do
+      KEY=$(echo "$INIT_JSON" | jq -r ".recovery_keys_b64[$i] // empty")
+      [ -z "$KEY" ] && continue
+      aws ssm put-parameter \
+        --region "$AWS_REGION" \
+        --name "$SSM_PREFIX/recovery_key_$((i + 1))" \
+        --description "Vault recovery key $((i + 1)) — ${cluster_name}" \
+        --value "$KEY" \
+        --type "SecureString" \
+        --overwrite
+      log "  recovery_key_$((i + 1)) stored."
+    done
 
-  log "=== Vault initialized successfully. Secrets stored in SSM under $SSM_PREFIX/ ==="
+    # Clear sensitive data from shell memory
+    unset ROOT_TOKEN INIT_JSON
+
+    log "=== Vault initialized successfully. Secrets stored in SSM under $SSM_PREFIX/ ==="
+  fi
 else
   log "Vault is already initialized — skipping init."
 fi
 
 log "=== Vault cloud-init complete ==="
 log "    UI  : https://$VAULT_API_ADDR:8200/ui"
-log "    Root token  : aws ssm get-parameter --name '$SSM_PREFIX/root_token' --with-decryption --region $AWS_REGION"
-log "    TLS cert    : /opt/vault/certs/vault.crt  (copy to client as VAULT_CACERT)"
+if [ "$BAREBONES_DEV_MODE" = "true" ]; then
+  log "    Bootstrap  : sudo cat $BOOTSTRAP_DIR/init.json"
+else
+  log "    Root token : aws ssm get-parameter --name '$SSM_PREFIX/root_token' --with-decryption --region $AWS_REGION"
+  log "    TLS cert   : /opt/vault/certs/vault.crt  (copy to client as VAULT_CACERT)"
+fi

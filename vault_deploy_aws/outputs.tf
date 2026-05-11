@@ -25,22 +25,22 @@ output "iam_role_arn" {
 
 output "kms_key_id" {
   description = "ID of the KMS key used for Vault auto-unseal."
-  value       = aws_kms_key.vault.key_id
+  value       = var.barebones_dev_mode ? null : aws_kms_key.vault[0].key_id
 }
 
 output "kms_key_arn" {
   description = "ARN of the KMS key used for Vault auto-unseal."
-  value       = aws_kms_key.vault.arn
+  value       = var.barebones_dev_mode ? null : aws_kms_key.vault[0].arn
 }
 
 output "ssm_prefix" {
   description = "SSM Parameter Store path prefix where Vault secrets are stored by cloud-init."
-  value       = local.ssm_prefix
+  value       = var.barebones_dev_mode ? null : local.ssm_prefix
 }
 
 output "ssm_root_token_path" {
   description = "Full SSM Parameter Store path of the Vault root token (SecureString)."
-  value       = "${local.ssm_prefix}/root_token"
+  value       = var.barebones_dev_mode ? null : "${local.ssm_prefix}/root_token"
 }
 
 output "vault_tls_cert_host_path" {
@@ -62,5 +62,10 @@ output "subnet_id" {
 
 output "ssm_tls_cert_b64_path" {
   description = "SSM Parameter Store path of the base64-encoded Vault TLS certificate. Read with aws_ssm_parameter to pass as vault_ca_cert_b64 to dynamic modules."
-  value       = "${local.ssm_prefix}/tls_cert_b64"
+  value       = var.barebones_dev_mode ? null : "${local.ssm_prefix}/tls_cert_b64"
+}
+
+output "barebones_bootstrap_file" {
+  description = "Local host path of the init JSON file containing the root token and unseal key when barebones_dev_mode is enabled."
+  value       = var.barebones_dev_mode ? "${local.bootstrap_dir}/init.json" : null
 }

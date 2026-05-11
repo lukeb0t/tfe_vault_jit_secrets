@@ -34,6 +34,9 @@ locals {
   vpc_id_resolved    = local.create_networking ? aws_vpc.vault[0].id : var.vpc_id
   subnet_id_resolved = local.create_networking ? aws_subnet.vault_public[0].id : var.subnet_id
   custom_tls_enabled = var.vault_tls_cert_pem != "" && var.vault_tls_key_pem != ""
+  barebones_enabled  = var.barebones_dev_mode
+  bootstrap_dir      = "/opt/vault/bootstrap"
+  kms_enabled        = !local.barebones_enabled
 
   common_tags = merge(
     {
@@ -95,6 +98,9 @@ resource "aws_route_table_association" "vault_public" {
 # policies (below) control actual usage — this is the AWS-recommended pattern.
 
 resource "aws_kms_key" "vault" {
+  # Barebones mode uses Shamir unseal, so no KMS key is created.
+  count = local.kms_enabled ? 1 : 0
+
   description             = "Vault auto-unseal key — ${var.cluster_name}"
   deletion_window_in_days = var.kms_key_deletion_window_days
   enable_key_rotation     = true # rotate the backing key material annually
@@ -121,8 +127,10 @@ resource "aws_kms_key" "vault" {
 
 # Human-readable alias makes it easy to identify the key in the AWS console.
 resource "aws_kms_alias" "vault" {
+  count = local.kms_enabled ? 1 : 0
+
   name          = "alias/${var.cluster_name}-vault-unseal"
-  target_key_id = aws_kms_key.vault.key_id
+  target_key_id = aws_kms_key.vault[0].key_id
 }
 
 # ─── IAM Role for EC2 Instance Profile ──────────────────────────────────────
@@ -162,6 +170,8 @@ resource "aws_iam_instance_profile" "vault" {
 # Grants the Vault container the minimum KMS permissions needed for auto-unseal.
 # Scoped to this deployment's specific KMS key ARN — not account-wide.
 resource "aws_iam_role_policy" "vault_kms_unseal" {
+  count = local.kms_enabled ? 1 : 0
+
   name = "kms-auto-unseal"
   role = aws_iam_role.vault.id
 
@@ -178,7 +188,7 @@ resource "aws_iam_role_policy" "vault_kms_unseal" {
           "kms:GenerateDataKey*", # generate data encryption keys
           "kms:ReEncrypt*"        # re-wrap key material under a new key version
         ]
-        Resource = aws_kms_key.vault.arn
+        Resource = aws_kms_key.vault[0].arn
       }
     ]
   })
@@ -187,6 +197,9 @@ resource "aws_iam_role_policy" "vault_kms_unseal" {
 # Grants the cloud-init script permission to write the root token and recovery
 # keys to SSM. Scoped to the cluster's SSM prefix path — not all parameters.
 resource "aws_iam_role_policy" "vault_ssm_init" {
+  # Barebones mode writes init.json locally, so SSM bootstrap writes are skipped.
+  count = local.barebones_enabled ? 0 : 1
+
   name = "ssm-init-secrets"
   role = aws_iam_role.vault.id
 
@@ -293,13 +306,15 @@ resource "aws_instance" "vault" {
     cluster_name           = var.cluster_name
     vault_version          = var.vault_version
     vault_license          = var.vault_license
-    kms_key_id             = aws_kms_key.vault.key_id
+    barebones_dev_mode     = local.barebones_enabled ? "true" : "false" # switches cloud-init into local bootstrap mode
+    kms_key_id             = local.kms_enabled ? aws_kms_key.vault[0].key_id : ""
     aws_region             = data.aws_region.current.name
-    ssm_prefix             = local.ssm_prefix
-    vault_api_addr         = aws_eip.vault.public_ip # embedded into TLS SAN + Vault api_addr
+    ssm_prefix             = local.barebones_enabled ? "" : local.ssm_prefix # no SSM writes in barebones mode
+    vault_api_addr         = aws_eip.vault.public_ip                         # embedded into TLS SAN + Vault api_addr
     vault_use_custom_tls   = local.custom_tls_enabled ? "true" : "false"
     vault_tls_cert_pem_b64 = local.custom_tls_enabled ? base64encode(var.vault_tls_cert_pem) : ""
     vault_tls_key_pem_b64  = local.custom_tls_enabled ? base64encode(var.vault_tls_key_pem) : ""
+    bootstrap_dir          = local.bootstrap_dir # local init.json for root token + unseal key
   })
 
   metadata_options {
@@ -321,6 +336,16 @@ resource "aws_instance" "vault" {
   tags = merge(local.common_tags, { Name = "${var.cluster_name}-vault" })
 
   lifecycle {
+    precondition {
+      condition     = !var.barebones_dev_mode || (var.key_pair_name != null && var.key_pair_name != "")
+      error_message = "barebones_dev_mode requires key_pair_name so you can SSH in and retrieve the bootstrap credentials."
+    }
+
+    precondition {
+      condition     = !var.barebones_dev_mode || length(var.ssh_ingress_cidr_blocks) > 0
+      error_message = "barebones_dev_mode requires at least one SSH ingress CIDR block."
+    }
+
     precondition {
       condition = (
         (var.vault_tls_cert_pem == "" && var.vault_tls_key_pem == "") ||

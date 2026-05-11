@@ -61,6 +61,12 @@ variable "ssh_ingress_cidr_blocks" {
 
 # ─── EC2 ───────────────────────────────────────────────────────────────────
 
+variable "barebones_dev_mode" {
+  description = "When true, disable KMS auto-unseal and SSM bootstrap storage, use Shamir unseal with one key share, and require key_pair_name for SSH access."
+  type        = bool
+  default     = false
+}
+
 variable "instance_type" {
   description = "EC2 instance type for the Vault server."
   type        = string
@@ -68,7 +74,7 @@ variable "instance_type" {
 }
 
 variable "key_pair_name" {
-  description = "Name of an existing EC2 key pair to associate with the instance for SSH access. Leave null to skip (use SSM Session Manager instead)."
+  description = "Name of an existing EC2 key pair to associate with the instance for SSH access. Required when barebones_dev_mode is true; leave null to skip otherwise."
   type        = string
   default     = null # prefer SSM over SSH; set only if SSH access is explicitly required
 }
@@ -121,4 +127,3 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
-
