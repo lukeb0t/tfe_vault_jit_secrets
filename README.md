@@ -61,7 +61,16 @@ Both modules:
 
 ### Step 2 — Configure TFE dynamic secrets (cloud-agnostic)
 
-Once Vault is running, the two dynamic-secrets modules work identically regardless of which cloud Vault is deployed on. They only need `vault_addr` and a Vault token.
+Once Vault is running, the two dynamic-secrets modules work identically regardless of which cloud Vault is deployed on. They require:
+- Vault server address and token (bootstrap credentials)
+- TFE hostname and organization/workspace information
+- TFE API token for workspace variable injection
+- Vault's TLS certificate (if self-signed)
+- AWS-specific config (region, IAM role ARN for AWS module)
+
+> **⚠️ Security Note — Bootstrap Tokens:** These examples use Vault root or admin tokens for bootstrapping only. **Do not use root tokens in production.** Instead, create a restricted policy scoped to JWT auth backend and secrets engine setup, authenticate with that token, rotate/revoke the bootstrap token after initial setup, and use TFE's workload identity (JWT) for ongoing operations.
+
+See [`dynamic_vault_secrets`](./dynamic_vault_secrets/README.md) and [`dynamic_aws_provider_secrets`](./dynamic_aws_provider_secrets/README.md) for complete prerequisites and configuration details.
 
 ---
 
