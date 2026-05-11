@@ -30,6 +30,25 @@ AWS Terraform provider  (no static credentials required)
 
 **Credential chain:** Vault's EC2 instance profile → `sts:AssumeRole` → target IAM role → scoped STS session. The effective permissions are the intersection of the target role's policies and any inline session policy.
 
+## Prerequisites
+
+This module configures Vault to issue dynamic AWS credentials to TFE workspaces. Before applying:
+
+1. **Create a TFE workspace** where you want to use dynamic AWS credentials. (The workspace must exist first; this module injects variables into it but does not create it.)
+
+2. **Gather workspace information** for JWT claim scoping:
+   - `tfe_organization` — Your TFE organization name (e.g., `my-org`)
+   - `tfe_project` — Project containing the workspace (e.g., `my-project`), or `"*"` to match all
+   - `tfe_workspace` — Workspace name (e.g., `prod`), or `"*"` to match all workspaces in the project
+
+   > **Note:** These are used to scope Vault's JWT authentication. Only workspaces matching this pattern can authenticate to Vault and obtain AWS credentials. In production, use specific workspace names for security; use `"*"` wildcards only in development.
+
+3. **Obtain the workspace ID**: In TFE, go to Settings → General for the workspace. The ID appears as `ws-XXXXXXXXXXXXXXXX`.
+
+4. **Generate a TFE API token** with permission to manage workspace variables: Settings → Tokens → Create an API token. (Scoped to the organization is sufficient.)
+
+5. **Vault must be accessible** from TFE agents (via `tfe_hostname` and `vault_addr`). If either uses self-signed TLS, provide the CA certificate (`tfe_ca_cert_pem` and/or `vault_ca_cert_b64`).
+
 ## Usage
 
 Copy `terraform.tfvars.example` to `terraform.tfvars`, fill in your values, then:
@@ -95,8 +114,8 @@ The trust policy on the target role is managed by this module; no manual IAM cha
 | `vault_addr` | Address of the Vault server. | `string` | — | ✅ |
 | `vault_token` | Vault token used by the `vault` provider during bootstrap. Should be a root or admin token; rotate after first apply. | `string` (sensitive) | — | ✅ |
 | `tfe_hostname` | Hostname of the TFE instance (e.g. `tfe.example.com`). Works with any TFE — self-hosted or bring-your-own. | `string` | — | ✅ |
-| `tfe_organization` | TFE organization name. | `string` | — | ✅ |
-| `tfe_workspace_id` | TFE workspace ID (e.g. `ws-XXXXXXXXXXXXXXXX`). | `string` | — | ✅ |
+| `tfe_organization` | TFE organization name. Used to scope JWT `bound_claims` — only workspaces in this org can authenticate. | `string` | — | ✅ |
+| `tfe_workspace_id` | TFE workspace ID (e.g., `ws-XXXXXXXXXXXXXXXX`). Found in workspace Settings → General. | `string` | — | ✅ |
 | `tfe_token` | TFE API token with permission to manage workspace variables. | `string` (sensitive) | — | ✅ |
 | `aws_secrets_backend_region` | AWS region the secrets engine uses for STS API calls. | `string` | — | ✅ |
 | `vault_iam_user_arn` | ARN of the IAM principal Vault authenticates as (IAM user ARN for static credentials, or IAM role ARN if Vault runs on EC2). Granted `sts:AssumeRole` on the target role. | `string` | — | ✅ |
@@ -105,8 +124,8 @@ The trust policy on the target role is managed by this module; no manual IAM cha
 | `vault_namespace` | Vault namespace. Leave empty for root. | `string` | `""` | |
 | `vault_ca_cert_file` | Path to a PEM file for Vault's self-signed CA certificate. Required when Vault uses self-signed TLS. Alternatively set `VAULT_CACERT` in the environment. | `string` | `""` | |
 | `vault_ca_cert_b64` | Base64-encoded PEM CA cert for Vault. Injected as `TFC_VAULT_ENCODED_CACERT`. Required for self-signed TLS. | `string` (sensitive) | `""` | |
-| `tfe_project` | TFE project name. Use `"*"` to match all. | `string` | `"*"` | |
-| `tfe_workspace` | TFE workspace name. Use `"*"` to match all. | `string` | `"*"` | |
+| `tfe_project` | TFE project name. Used to scope JWT `bound_claims`. Use `"*"` to match all projects in the organization. | `string` | `"*"` | |
+| `tfe_workspace` | TFE workspace name. Used to scope JWT `bound_claims`. Use `"*"` to match all workspaces in the project. | `string` | `"*"` | |
 | `tfe_ca_cert_pem` | PEM-encoded CA cert for TFE's self-signed TLS certificate. Needed so Vault can verify TFE's OIDC discovery endpoint when `create_jwt_backend = true`. | `string` | `""` | |
 | `jwt_backend_path` | Mount path for the JWT auth backend. | `string` | `"jwt-aws-provider"` | |
 | `vault_role_name` | Name of the Vault JWT auth role. | `string` | `"tfe-vault-backed-aws"` | |
@@ -156,6 +175,8 @@ For manual setup, set these in the TFE workspace instead:
 The non-sensitive subset is also available as the `tfe_workspace_env_vars` output. Add `TFC_VAULT_ENCODED_CACERT` and, if used, `TFC_VAULT_NAMESPACE` separately.
 
 > **Important:** Each dynamic credential flow needs its own `TFC_VAULT_AUTH_PATH` and `TFC_VAULT_RUN_ROLE`. Do not point a vault-backed AWS workspace at the `dynamic_vault_secrets` backend/role.
+>
+> **Multiple JWT backends:** If using both `dynamic_vault_secrets` and `dynamic_aws_provider_secrets`, ensure they have different `workload_identity_audience` values (e.g., `vault.workload.identity.kv` vs. `vault.workload.identity.aws`). This prevents a single TFE workspace from matching multiple Vault roles—a critical security boundary.
 
 ## What resources are created
 

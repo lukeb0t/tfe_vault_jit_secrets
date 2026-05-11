@@ -43,13 +43,13 @@ variable "tfe_organization" {
 }
 
 variable "tfe_project" {
-  description = "TFE project name. Use '*' to match all projects."
+  description = "TFE project name used to scope JWT bound_claims.. Use '*' to match all projects."
   type        = string
   default     = "*"
 }
 
 variable "tfe_workspace" {
-  description = "TFE workspace name. Use '*' to match all workspaces in the project."
+  description = "TFE workspace name used to scope JWT bound_claims. Use '*' to match all workspaces in the project."
   type        = string
   default     = "*"
 }
@@ -69,9 +69,9 @@ variable "vault_role_name" {
 }
 
 variable "workload_identity_audience" {
-  description = "Expected 'aud' claim in TFE workload identity tokens."
+  description = "Expected 'aud' claim in TFE workload identity tokens. Must be different from other JWT backends to avoid authentication conflicts. Default is specific to AWS provider credentials flow."
   type        = string
-  default     = "vault.workload.identity"
+  default     = "vault.workload.identity.aws"
 }
 
 variable "token_ttl_seconds" {

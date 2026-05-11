@@ -71,9 +71,9 @@ variable "vault_role_name" {
 }
 
 variable "workload_identity_audience" {
-  description = "Expected 'aud' claim in TFE workload identity tokens. Must match TFC_VAULT_WORKLOAD_IDENTITY_AUDIENCE if overridden."
+  description = "Expected 'aud' claim in TFE workload identity tokens. Must be different from other JWT backends to avoid authentication conflicts. Default is specific to KV/general Vault access flow."
   type        = string
-  default     = "vault.workload.identity"
+  default     = "vault.workload.identity.kv"
 }
 
 variable "token_ttl_seconds" {
