@@ -33,9 +33,8 @@ variable "org_name" {
 }
 
 variable "create_networking" {
-  # Set to false when providing vpc_id/subnet_id from another module — avoids
-  # the Terraform "count depends on unknown value" plan error that occurs when
-  # vpc_id comes from a sibling module output (known only after apply).
+  # Set to false when providing vpc_id/subnet_id from another module or data source.
+  # This avoids "count depends on unknown value" errors when vpc_id is a module output.
   type    = bool
   default = true
 }

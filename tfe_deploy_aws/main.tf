@@ -22,12 +22,11 @@ data "aws_ami" "ubuntu_2204" {
 }
 
 locals {
-  # Normalize the caller-supplied prefix so outputs and policies stay consistent.
+  # Normalize SSM prefix for consistent outputs and IAM policies across modules.
   ssm_prefix = "/${trimsuffix(trimprefix(var.ssm_path_prefix, "/"), "/")}/${var.cluster_name}"
 
-  # create_networking is driven by an explicit bool var (not vpc_id == null)
-  # so Terraform can evaluate counts at plan time even when vpc_id comes from
-  # a sibling module output that is only known after apply.
+  # Use explicit bool instead of checking vpc_id == null to avoid count evaluation at plan time
+  # when vpc_id comes from a module output (known only after apply).
   create_networking = var.create_networking
   vpc_id_resolved   = local.create_networking ? aws_vpc.tfe[0].id : var.vpc_id
   subnet_id_resolved = local.create_networking ? aws_subnet.tfe_public[0].id : var.subnet_id
@@ -45,7 +44,7 @@ locals {
 # Random token reused for TFE IACT bootstrap and disk encryption password.
 resource "random_password" "iact_token" {
   length  = 32
-  special = false
+  special = false # alphanumeric only for simple password entry during initial setup
 }
 
 # Create a dedicated VPC when the caller does not provide one.
@@ -140,7 +139,7 @@ resource "aws_security_group" "tfe" {
       from_port   = 22
       to_port     = 22
       protocol    = "tcp"
-      cidr_blocks = [ingress.value]
+      cidr_blocks = [ingress.value] # allow iteration over CIDR list (empty = no SSH access)
     }
   }
 
@@ -188,7 +187,7 @@ resource "aws_iam_role_policy" "tfe_ssm" {
       {
         Effect = "Allow"
         Action = [
-          "ssm:PutParameter",
+          "ssm:PutParameter", # write admin and org tokens
           "ssm:GetParameter",
           "ssm:GetParameters"
         ]
@@ -233,9 +232,10 @@ resource "aws_instance" "tfe" {
   root_block_device {
     volume_type = "gp3"
     volume_size = var.root_volume_size_gb
-    encrypted   = true
+    encrypted   = true # encrypt TFE state and application data at rest
   }
 
+  # base64encode prevents Terraform from interpreting template variables as HCL.
   user_data_base64 = base64encode(templatefile("${path.module}/templates/cloud-init.sh.tpl", {
     tfe_hostname   = local.tfe_hostname
     tfe_license    = var.tfe_license

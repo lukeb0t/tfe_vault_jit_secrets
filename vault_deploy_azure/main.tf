@@ -68,13 +68,12 @@ resource "azurerm_role_assignment" "deployer_kv_admin" {
   principal_id         = data.azurerm_client_config.current.object_id
 }
 
-# Azure RBAC assignments can take up to 30 seconds to propagate.
-# Without this wait the key creation immediately following the role
-# assignment will fail with a 403 Forbidden.
-resource "time_sleep" "rbac_propagation" {
-  depends_on      = [azurerm_role_assignment.deployer_kv_admin]
-  create_duration = "30s"
-}
+  # Azure RBAC role assignments can take up to 30 seconds to propagate.
+  # Without this wait, the key creation immediately following will fail with 403 Forbidden.
+  resource "time_sleep" "rbac_propagation" {
+    depends_on      = [azurerm_role_assignment.deployer_kv_admin]
+    create_duration = "30s"
+  }
 
 # RSA key used by Vault's azurekeyvault seal to wrap/unwrap the master key
 # on every init and unseal operation.
@@ -85,7 +84,7 @@ resource "azurerm_key_vault_key" "vault_unseal" {
   key_vault_id = azurerm_key_vault.vault.id
   key_type     = "RSA"
   key_size     = 2048
-  key_opts     = ["wrapKey", "unwrapKey"]
+  key_opts     = ["wrapKey", "unwrapKey"] # asymmetric wrapping required for Vault auto-unseal
 
   tags = local.common_tags
 }
@@ -199,6 +198,7 @@ resource "azurerm_network_interface" "vault" {
 resource "azurerm_network_interface_security_group_association" "vault" {
   network_interface_id      = azurerm_network_interface.vault.id
   network_security_group_id = azurerm_network_security_group.vault.id
+  # NSG at NIC level (not subnet) avoids affecting other VNet resources.
 }
 
 # ─── Linux Virtual Machine ───────────────────────────────────────────────────
@@ -243,7 +243,7 @@ resource "azurerm_linux_virtual_machine" "vault" {
   os_disk {
     name                 = "${var.cluster_name}-vault-osdisk"
     caching              = "ReadWrite"
-    storage_account_type = "Premium_LRS" # consistent IOPS baseline — equivalent to gp3
+    storage_account_type = "Premium_LRS" # consistent IOPS baseline — equivalent to AWS gp3
     disk_size_gb         = var.os_disk_size_gb
   }
 

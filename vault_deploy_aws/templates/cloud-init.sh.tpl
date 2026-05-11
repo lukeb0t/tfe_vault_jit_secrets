@@ -180,6 +180,7 @@ for attempt in $(seq 1 $MAX_WAIT); do
 
   case "$HTTP_STATUS" in
     200|429|472|473|501)
+      # 200=initialized+unsealed, 429=sealed, 472/473=replication states, 501=uninitialized (expected)
       log "Vault API responding — HTTP $HTTP_STATUS (attempt $attempt)"
       break
       ;;

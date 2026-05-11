@@ -19,8 +19,10 @@ data "aws_ssm_parameter" "vault_ca_cert_b64" {
 }
 
 locals {
+  # Use SSM parameter if vault_root_token direct value is empty; allows secure token injection.
   vault_root_token_effective = var.vault_root_token != "" ? var.vault_root_token : try(data.aws_ssm_parameter.vault_root_token[0].value, "")
   vault_ca_cert_b64_effective = var.vault_ca_cert_b64 != "" ? var.vault_ca_cert_b64 : try(data.aws_ssm_parameter.vault_ca_cert_b64[0].value, "")
+  # Prefer vault_iam_principal_arn (supports both roles and users) over vault_iam_role_arn for flexibility.
   vault_iam_principal_arn_effective = var.vault_iam_principal_arn != "" ? var.vault_iam_principal_arn : var.vault_iam_role_arn
 }
 
@@ -93,7 +95,7 @@ resource "vault_kv_secret_v2" "demo_app" {
 resource "tfe_workspace" "kv_test" {
   name         = "vault-kv-test"
   organization = var.tfe_org_name
-  auto_apply   = true
+  auto_apply   = true # run automatically when config changes (for demo safety)
   force_delete = true
   description  = "Test: vault provider dynamic creds — reads KV secret from Vault"
 }

@@ -30,7 +30,7 @@
 data "aws_caller_identity" "current" {}
 
 locals {
-  # Use a read-only demo policy when no custom policy is supplied.
+  # Use read-only demo policy when no custom policy is supplied.
   # Replace with the minimum permissions needed by your TFE workspaces.
   target_iam_policy = var.target_iam_policy_json != "" ? var.target_iam_policy_json : jsonencode({
     Version = "2012-10-17"
@@ -142,12 +142,12 @@ resource "vault_jwt_auth_backend" "tfe" {
 
 resource "vault_jwt_auth_backend_role" "tfe" {
   # Use the path from the backend resource if it was created, otherwise use the variable directly.
+  # Use existing JWT backend if not creating one (e.g., shared backend across modules).
   backend   = var.create_jwt_backend ? vault_jwt_auth_backend.tfe[0].path : var.jwt_backend_path
   role_name = var.vault_role_name
   role_type = "jwt"
 
-  # bound_audiences enforces the 'aud' (audience) claim in the JWT.
-  # This isolates the AWS module from other JWT backends (e.g., vault.workload.identity.kv).
+  # bound_audiences isolates this AWS flow from other JWT backends (e.g., kv secrets flow).
   bound_audiences   = [var.workload_identity_audience]
   bound_claims_type = "glob" # enables wildcard matching for org/project/workspace
 

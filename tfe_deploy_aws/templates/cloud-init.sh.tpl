@@ -86,6 +86,7 @@ FROM hashicorp/tfc-agent:latest
 USER root
 RUN mkdir -p /tmp/terraform && chmod 1777 /tmp /tmp/terraform
 VOLUME ["/tmp/terraform"]
+# TFC agent jobs need /tmp/terraform for plan artifacts; vanilla image has read-only /tmp.
 ENV TMPDIR=/tmp/terraform
 USER tfc-agent
 WORKERDOCKERFILE
@@ -110,7 +111,7 @@ services:
       TFE_TLS_CERT_FILE: "/etc/ssl/private/terraform-enterprise/cert.pem"
       TFE_TLS_KEY_FILE: "/etc/ssl/private/terraform-enterprise/key.pem"
       TFE_TLS_CA_BUNDLE_FILE: "/etc/ssl/private/terraform-enterprise/bundle.pem"
-      TFE_IACT_SUBNETS: "0.0.0.0/0"
+      TFE_IACT_SUBNETS: "0.0.0.0/0" # allow IACT from any subnet during initial setup
       TFE_IACT_TOKEN: "${iact_token}"
       TMPDIR: "/tmp/terraform"
     cap_add:

@@ -20,7 +20,8 @@ module "tfe" {
   admin_password    = var.admin_password
   org_name          = var.tfe_org_name
   key_pair_name     = var.key_pair_name
-  create_networking = false # join Vault's VPC; explicit bool avoids plan-time count error
+  # Explicit bool avoids "count depends on unknown value" error when vpc_id comes from module output.
+  create_networking = false
 
   # Deploy into Vault's VPC — enables direct communication between Vault and TFE
   vpc_id    = module.vault.vpc_id
@@ -34,7 +35,7 @@ resource "aws_security_group_rule" "vault_from_tfe" {
   from_port                = 8200
   to_port                  = 8200
   protocol                 = "tcp"
-  source_security_group_id = module.tfe.security_group_id
+  source_security_group_id = module.tfe.security_group_id # restrict to TFE's SG only
   security_group_id        = module.vault.security_group_id
   description              = "Allow TFE to reach Vault API for dynamic credentials"
 }

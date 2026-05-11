@@ -76,8 +76,7 @@ resource "vault_jwt_auth_backend_role" "tfe_workspace" {
 
   # bound_audiences enforces the 'aud' (audience) claim in the JWT matches this value.
   # This prevents a TFE workspace from authenticating to the wrong Vault backend.
-  # vault.workload.identity is the default audience TFE uses; override with
-  # TFC_VAULT_WORKLOAD_IDENTITY_AUDIENCE in the workspace if you change this.
+  # vault.workload.identity.kv is the default; customize for isolation from other flows.
   bound_audiences   = [var.workload_identity_audience]
   bound_claims_type = "glob" # enables wildcard matching in bound_claims values
 
@@ -105,7 +104,7 @@ resource "vault_mount" "kv" {
   count = var.create_demo_kv_mount ? 1 : 0
 
   path        = "kv"
-  type        = "kv-v2"
+  type        = "kv-v2" # v2 supports secret versioning and metadata
   description = "KV v2 secrets mount — demonstration target for TFE dynamic creds"
 }
 
@@ -150,7 +149,7 @@ resource "tfe_variable" "vault_run_role" {
 }
 
 resource "tfe_variable" "vault_namespace" {
-  # Only inject namespace when one is set — root namespace needs no variable.
+  # Inject namespace var only when explicitly set — root namespace doesn't need TFC_VAULT_NAMESPACE.
   count = var.vault_namespace != "" ? 1 : 0
 
   workspace_id = var.tfe_workspace_id

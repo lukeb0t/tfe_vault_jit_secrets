@@ -306,15 +306,14 @@ resource "aws_instance" "vault" {
     http_endpoint = "enabled"
     http_tokens   = "required" # enforce IMDSv2; rejects unauthenticated metadata requests
 
-    # Default hop limit is 1, which blocks containers from reaching IMDS.
-    # Setting 2 allows the Docker container to call IMDS for IAM credentials
-    # (needed so Vault can authenticate to KMS for auto-unseal).
+    # Hop limit 2 allows the Vault Docker container to reach IMDS for IAM credentials
+    # (default 1 blocks containers; needed for KMS auto-unseal).
     http_put_response_hop_limit = 2
   }
 
   root_block_device {
     volume_size           = var.root_volume_size_gb
-    volume_type           = "gp3" # better baseline IOPS than gp2 at same cost
+    volume_type           = "gp3" # better baseline IOPS (3,000/125 MB/s) than gp2 at same cost
     encrypted             = true  # encrypt Raft data at rest
     delete_on_termination = true
   }
